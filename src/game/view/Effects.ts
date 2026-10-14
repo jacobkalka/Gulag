@@ -198,7 +198,8 @@ export class Effects {
     this.group.add(this.add.points, this.alpha.points);
     const tracerGeo = new THREE.CylinderGeometry(1, 1, 1, 6, 1, true);
     tracerGeo.rotateX(Math.PI / 2);
-    const tracerMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.0, 0.75, 0.42).multiplyScalar(5), blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, opacity: 0.9 });
+    // warm and only mildly HDR: a hint of bloom without turning into white sticks
+    const tracerMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.0, 0.7, 0.36).multiplyScalar(2.4), blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, opacity: 0.8 });
     for (let i = 0; i < 48; i++) {
       const mesh = new THREE.Mesh(tracerGeo, tracerMat);
       mesh.visible = false;
@@ -370,7 +371,7 @@ export class Effects {
       if (!tr.active) continue;
       tr.t += dt;
       const head = Math.min(tr.len, tr.t * 420);
-      const tail = Math.max(0, head - 4.5);
+      const tail = Math.max(0, head - 2.6);
       if (tail >= tr.len - 0.01) {
         tr.active = false;
         tr.mesh.visible = false;

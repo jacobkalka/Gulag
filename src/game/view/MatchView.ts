@@ -88,6 +88,8 @@ export class MatchView {
   private camRoll = 0;
   // state
   private spectateId = -1;
+  /** Player being spectated from their own eyes (their body is hidden), or -1. */
+  private fpSpectateId = -1;
   private stepDist = new Map<number, number>();
   private lastWeaponModel = '';
   private lastSlot = -1;
@@ -269,6 +271,7 @@ export class MatchView {
       this.effects.update(0.05);
     }
     if (this.ended && this.endTimer > 0) this.endTimer -= seconds;
+    this.hud.update(seconds); // let banners/hitmarkers age like real time would
     this.frame(1 / 60);
   }
 
@@ -561,6 +564,7 @@ export class MatchView {
         this.camera.updateProjectionMatrix();
       }
       this.spectateId = -1;
+      this.fpSpectateId = -1;
       // screen feedback
       const fx = this.o.renderer.screenFx;
       fx.set('uFlash', Math.pow(clamp(local.flash, 0, 1), 0.7));
@@ -626,16 +630,34 @@ export class MatchView {
     const rx = Math.cos(yaw);
     const rz = -Math.sin(yaw);
     const head = new THREE.Vector3(this.pose.x, this.pose.y + 1.55, this.pose.z);
-    let back = 2.3;
-    const ox = -fx * back + rx * 0.55;
-    const oz = -fz * back + rz * 0.55;
-    const hit = s.world.raycast(head.x, head.y, head.z, ox, 0.35, oz, 1, OPAQUE);
-    if (hit) back = Math.max(0.3, back * hit.t - 0.25);
-    const k = back / 2.3;
-    const want = new THREE.Vector3(head.x + ox * k, head.y + 0.35 * k, head.z + oz * k);
-    this.camera.position.lerp(want, 1 - Math.exp(-dt * 12));
-    const look = head.clone().add(new THREE.Vector3(fx * 6, Math.sin(this.pose.pitch) * 6, fz * 6));
-    this.camera.lookAt(look);
+    // over the shoulder if there is room; centered behind; otherwise their own eyes
+    const FULL = 2.3;
+    const probe = (shoulder: number) => {
+      const ox = -fx * FULL + rx * shoulder;
+      const oz = -fz * FULL + rz * shoulder;
+      const hit = s.world.raycast(head.x, head.y, head.z, ox, 0.35, oz, 1, OPAQUE);
+      return { back: hit ? FULL * hit.t - 0.3 : FULL, ox, oz };
+    };
+    let o = probe(0.55);
+    if (o.back < 1.1) {
+      const c = probe(0);
+      if (c.back > o.back) o = c;
+    }
+    const prevFp = this.fpSpectateId;
+    if (o.back < 0.9) {
+      this.fpSpectateId = target.id;
+      const eye = MOVE.eyeStand + (MOVE.eyeCrouch - MOVE.eyeStand) * this.pose.crouch;
+      this.camera.position.set(this.pose.x, this.pose.y + eye, this.pose.z);
+      this.camera.rotation.set(this.pose.pitch, yaw, 0, 'YXZ');
+    } else {
+      this.fpSpectateId = -1;
+      const k = Math.min(o.back, FULL) / FULL;
+      const want = new THREE.Vector3(head.x + o.ox * k, head.y + 0.35 * k, head.z + o.oz * k);
+      if (prevFp >= 0) this.camera.position.copy(want);
+      else this.camera.position.lerp(want, 1 - Math.exp(-dt * 12));
+      const look = head.clone().add(new THREE.Vector3(fx * 6, Math.sin(this.pose.pitch) * 6, fz * 6));
+      this.camera.lookAt(look);
+    }
     this.hud.setSpectate(target.name + (target.team !== team ? ' (ENEMY)' : ''));
   }
 
@@ -655,7 +677,7 @@ export class MatchView {
         this.scene.add(cv.root);
       }
       const isLocalFP = local && p.id === local.id && p.alive;
-      cv.root.visible = !isLocalFP && (p.alive || p.deadT < 12);
+      cv.root.visible = !isLocalFP && p.id !== this.fpSpectateId && (p.alive || p.deadT < 12);
       if (!cv.root.visible) continue;
       s.renderPose(p.id, this.pose);
       const rp: RenderPlayer = {
