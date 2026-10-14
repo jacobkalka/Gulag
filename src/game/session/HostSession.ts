@@ -43,6 +43,8 @@ export class HostSession implements MatchSession {
   readonly nav: NavGrid;
   readonly localId: number;
   readonly playlistId: string;
+  /** Set by whoever started the match (solo practice or a network room). */
+  matchId = '';
   private bots = new Map<number, BotBrain>();
   private acc = 0;
   private alpha = 1;

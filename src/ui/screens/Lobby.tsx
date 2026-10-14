@@ -10,6 +10,9 @@ import { StatsTab } from './StatsTab';
 import { screen } from '@/app/state';
 import { roomView } from '@/app/rooms';
 import { RoomEntry, RoomPanel } from './Room';
+import { SocialTab } from './Social';
+import { matchmaking, party, social, account } from '@/app/social';
+import { useEffect, useState } from 'preact/hooks';
 
 export function TopNav(): JSX.Element {
   const p = profile.value;
@@ -33,6 +36,11 @@ export function TopNav(): JSX.Element {
           </button>
         ))}
       </nav>
+      {party.value && (
+        <div class="nav-party" title="Your party">
+          PARTY <b>{party.value.members.length}/4</b>
+        </div>
+      )}
       <div class="nav-me">
         <div class="nav-me-name">{p.username}</div>
         <div class="nav-me-lv">
@@ -87,9 +95,7 @@ export function PlayTab(props: { game: GameController }): JSX.Element {
           })}
         </div>
         <div class="play-actions">
-          <Button variant="primary" size="xl" disabled title="Online matchmaking needs Firebase (see SETUP.md)">
-            FIND MATCH
-          </Button>
+          <FindMatch />
           <div class="play-row">
             <Button variant="secondary" size="lg" onClick={start} testid="practice">
               PRACTICE VS BOTS
@@ -124,7 +130,8 @@ export function Lobby(props: { game: GameController }): JSX.Element {
           </div>
         )}
         {tab === 'stats' && <StatsTab />}
-        {(tab === 'loadout' || tab === 'social') && (
+        {tab === 'social' && <SocialTab />}
+        {tab === 'loadout' && (
           <div class="tab-wrap">
             <Panel title={tab.toUpperCase()}>
               <p class="hint big">Coming online in the next milestone.</p>
@@ -137,5 +144,50 @@ export function Lobby(props: { game: GameController }): JSX.Element {
         <span class="ver">BUILD {__BUILD__}</span>
       </footer>
     </div>
+  );
+}
+
+/** FIND MATCH button, or the live search status while queued. */
+function FindMatch(): JSX.Element {
+  const api = social.value;
+  const mm = matchmaking.value;
+  const pv = party.value;
+  const me = account.value?.uid;
+  const [, tick] = useState(0);
+  useEffect(() => {
+    if (mm.state === 'idle') return;
+    const t = setInterval(() => tick((n) => n + 1), 500);
+    return () => clearInterval(t);
+  }, [mm.state]);
+  if (mm.state !== 'idle') {
+    const secs = Math.floor((Date.now() - mm.since) / 1000);
+    return (
+      <div class="mm-status" data-testid="mm-status">
+        <div>
+          <div class="mm-t">{mm.state === 'found' ? 'MATCH FOUND' : 'SEARCHING'}</div>
+          <div class="mm-s">
+            {mm.playlist.toUpperCase()} · {Math.floor(secs / 60)}:{String(secs % 60).padStart(2, '0')} · {mm.queued}/{mm.needed} IN QUEUE
+          </div>
+        </div>
+        {mm.state === 'searching' && (
+          <Button variant="ghost" onClick={() => void api?.cancelMatchmaking()} testid="cancel-mm">
+            CANCEL
+          </Button>
+        )}
+      </div>
+    );
+  }
+  const follower = !!pv && pv.leader !== me;
+  return (
+    <Button
+      variant="primary"
+      size="xl"
+      disabled={!api || follower}
+      title={!api ? 'Online matchmaking needs Firebase (see SETUP.md)' : follower ? 'The party leader starts matchmaking' : ''}
+      onClick={() => void api?.findMatch(selectedPlaylist.value)}
+      testid="find-match"
+    >
+      {follower ? 'LEADER QUEUES' : 'FIND MATCH'}
+    </Button>
   );
 }

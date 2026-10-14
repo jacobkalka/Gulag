@@ -35,6 +35,9 @@ async function boot(): Promise<void> {
     throw e;
   }
   (window as unknown as { __game: unknown }).__game = game;
+  // debug/test hook: UI state signals
+  const social = await import('./app/social');
+  (window as unknown as { __state: unknown }).__state = { ...state, ...social };
   await game.load((progress, label) => (state.loading.value = { progress, label }));
   render(h(App, { game }), uiRoot);
   state.screen.value = 'lobby';

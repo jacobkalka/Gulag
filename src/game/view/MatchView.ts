@@ -26,6 +26,9 @@ export interface MatchSummary {
   local: PlayerState | null;
   rounds: number;
   playlist: string;
+  matchId?: string;
+  /** Human players who took part (excluding bots). */
+  humans: number;
 }
 
 export interface MatchViewOptions {
@@ -280,6 +283,8 @@ export class MatchView {
       local,
       rounds: s.round.round,
       playlist: s.playlistId,
+      matchId: s.matchId,
+      humans: s.players.filter((p) => !p.bot).length,
     };
   }
 

@@ -65,6 +65,8 @@ export class NetHost {
   private lastRosterTick = -1000;
   private now: () => number;
   private closed = false;
+  /** Matchmade rooms: the team each expected player (by pid) should land on. */
+  teamHints = new Map<string, 0 | 1>();
   onRoom: ((room: RoomState) => void) | null = null;
   onChat: ((line: ChatLine) => void) | null = null;
 
@@ -112,7 +114,7 @@ export class NetHost {
     if (m.v !== PROTOCOL_VERSION) return this.reject(link, 'VERSION MISMATCH: REFRESH THE PAGE TO UPDATE');
     if (this.peers.has(link.id)) return this.reject(link, 'ALREADY IN THE ROOM');
     if (this.humanCount >= this.capacity()) return this.reject(link, 'ROOM IS FULL');
-    const team = this.pickTeam();
+    const team = this.pickTeam(link.id);
     if (this.session && this.session.replaceableBot(team) < 0 && this.session.replaceableBot(team === 0 ? 1 : 0) < 0) {
       return this.reject(link, 'MATCH IN PROGRESS: TRY AGAIN WHEN IT ENDS');
     }
@@ -149,9 +151,19 @@ export class NetHost {
     return c;
   }
 
-  private pickTeam(): 0 | 1 {
+  private pickTeam(pid?: string): 0 | 1 {
     const c = this.teamCounts();
+    const hint = pid ? this.teamHints.get(pid) : undefined;
+    const size = PLAYLISTS[this.room.playlist].rules.teamSize;
+    if (hint !== undefined && c[hint] < size) return hint;
     return c[1] < c[0] ? 1 : 0;
+  }
+
+  /** Puts the host on a team (matchmade rooms). */
+  setSelfTeam(team: 0 | 1): void {
+    this.selfTeam = team;
+    this.refreshMembers();
+    this.broadcastRoom();
   }
 
   private onPeerMsg(peer: Peer, m: ClientMsg): void {
@@ -310,6 +322,7 @@ export class NetHost {
       tick: session.tick,
       players: [],
     };
+    session.matchId = this.match.matchId;
     this.refreshMatchPlayers();
     this.room.phase = 'match';
     for (const p of peers) p.ready = false;
@@ -414,6 +427,14 @@ export class NetHost {
     }));
     const msg: HostMsg = { t: 'roster', players };
     for (const p of this.peers.values()) if (p.playerId >= 0) p.link.sendR(msg);
+  }
+
+  /** Peer id (the Firebase uid in online rooms) controlling each human player. */
+  humanPids(): Map<number, string> {
+    const m = new Map<number, string>();
+    if (this.session) m.set(this.session.localId, this.selfPid);
+    for (const p of this.peers.values()) if (p.playerId >= 0) m.set(p.playerId, p.pid);
+    return m;
   }
 
   /** Ping per player id for the scoreboard (host sees everyone's reported RTT). */

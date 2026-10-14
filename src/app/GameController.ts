@@ -40,6 +40,12 @@ export class GameController {
   paused = false;
   readonly rooms: RoomController;
   private bgWorker: Worker | null = null;
+  /** Backend hooks: match records for XP validation (see src/backend/matches.ts). */
+  readonly matchHooks: {
+    begin: (session: MatchSession, meta: MatchMeta) => void;
+    end: (session: MatchSession, summary: MatchSummary, meta: MatchMeta) => void;
+  }[] = [];
+  private matchMeta: MatchMeta = {};
 
   constructor(readonly canvas: HTMLCanvasElement, readonly uiRoot: HTMLElement) {
     const st = settings.value;
@@ -148,12 +154,21 @@ export class GameController {
 
   startBotMatch(playlist: PlaylistId, difficulty: BotDifficulty, loadout: Loadout, name: string): void {
     const session = new HostSession({ map: this.map, playlist, local: { name, loadout }, fillBots: true, difficulty });
-    this.beginMatch(session);
+    session.matchId = `p${Date.now().toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`;
+    this.beginMatch(session, { host: true });
   }
 
-  beginMatch(session: MatchSession): void {
+  beginMatch(session: MatchSession, meta: MatchMeta = {}): void {
     this.leaveMatch(false);
     this.session = session;
+    this.matchMeta = meta;
+    for (const h of this.matchHooks) {
+      try {
+        h.begin(session, meta);
+      } catch (e) {
+        console.warn('match hook failed', e);
+      }
+    }
     const mv = new MatchView({
       renderer: this.renderer,
       assets: this.assets,
@@ -162,6 +177,13 @@ export class GameController {
       hudParent: this.uiRoot,
       onMatchEnd: (s) => {
         this.input.releaseLock();
+        for (const h of this.matchHooks) {
+          try {
+            h.end(session, s, meta);
+          } catch (e) {
+            console.warn('match hook failed', e);
+          }
+        }
         this.onMatchEnd?.(s);
       },
     });
@@ -195,6 +217,10 @@ export class GameController {
 
   get currentSession(): MatchSession | null {
     return this.session;
+  }
+
+  get currentMatchMeta(): MatchMeta {
+    return this.matchMeta;
   }
 
   setPaused(p: boolean): void {
@@ -268,6 +294,14 @@ export class GameController {
       return { seq: ++seq + Math.floor(performance.now()), mx: 0, mz, yaw: this.input.yaw, pitch: this.input.pitch, buttons, slot: p ? p.slot : 0, viewTick: s.viewTick() };
     });
   }
+}
+
+/** How the local machine relates to a match (set by whoever starts it). */
+export interface MatchMeta {
+  /** This browser runs the authoritative simulation. */
+  host?: boolean;
+  /** Peer ids (Firebase uids online) of the human players, by player id (host only). */
+  pids?: Map<number, string>;
 }
 
 function tick(): Promise<void> {

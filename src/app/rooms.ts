@@ -38,12 +38,25 @@ export function onlineRoomsAvailable(): boolean {
   return !!onlineSignaling && new URLSearchParams(location.search).get('net') !== 'local';
 }
 
+export interface CreateRoomOptions {
+  code?: string;
+  playlist?: PlaylistId;
+  fillBots?: boolean;
+  /** Matchmade room: expected players (uid -> team); auto-starts when all joined or on timeout. */
+  expect?: { teams: Map<string, 0 | 1>; timeoutMs: number };
+}
+
 export class RoomController {
   private signaling: Signaling | null = null;
   private host: NetHost | null = null;
   private client: NetClient | null = null;
   private stopAccept: (() => void) | null = null;
   private leaving = false;
+  private expected: Map<string, 0 | 1> | null = null;
+  private autoTimer: ReturnType<typeof setTimeout> | null = null;
+  private autoReady = false;
+  /** Backend hooks: a room this player hosts opened/closed (party members follow the code). */
+  onHostedRoom: ((code: string | null) => void) | null = null;
 
   constructor(private game: GameController) {}
 
@@ -63,17 +76,17 @@ export class RoomController {
     return { name: p.username, level: levelForXp(p.xp).level, loadout: p.loadout };
   }
 
-  async createRoom(): Promise<void> {
+  async createRoom(opts: CreateRoomOptions = {}): Promise<void> {
     if (this.active || roomBusy.value) return;
     roomBusy.value = 'CREATING ROOM';
     let sig: Signaling | null = null;
     try {
       sig = this.makeSignaling();
       const me = this.me();
-      const playlist = selectedPlaylist.value;
+      const playlist = opts.playlist ?? selectedPlaylist.value;
       let code = '';
       for (let i = 0; i < 6 && !code; i++) {
-        const c = randomRoomCode();
+        const c = i === 0 && opts.code ? opts.code : randomRoomCode();
         try {
           await sig.hostRoom({ code: c, hostId: sig.selfId, hostName: me.name, playlist, players: 1, capacity: capacityOf(playlist), version: PROTOCOL_VERSION });
           code = c;
@@ -87,13 +100,24 @@ export class RoomController {
       host.onRoom = (room) => {
         this.updateRoom(room);
         s.updateRoom({ players: room.members.length, playlist: room.playlist, capacity: capacityOf(room.playlist) });
+        this.checkAutoStart();
       };
       host.onChat = (line) => this.pushChat(line);
+      if (opts.fillBots !== undefined) host.setFillBots(opts.fillBots);
       this.stopAccept = acceptPeers(sig, (link) => host.acceptLink(link));
       this.signaling = sig;
       this.host = host;
       this.leaving = false;
       roomView.value = { role: 'host', room: host.room, selfPid: sig.selfId, chat: [], mode: sig.kind };
+      if (opts.expect) {
+        this.expected = new Map(opts.expect.teams);
+        host.teamHints = this.expected;
+        const myTeam = this.expected.get(sig.selfId);
+        if (myTeam !== undefined) host.setSelfTeam(myTeam);
+        this.autoTimer = setTimeout(() => this.startMatch(), opts.expect.timeoutMs);
+        this.checkAutoStart();
+      }
+      this.onHostedRoom?.(code);
     } catch (e) {
       sig?.dispose();
       pushToast({ title: 'COULD NOT CREATE ROOM', body: errText(e), kind: 'error' });
@@ -102,7 +126,22 @@ export class RoomController {
     }
   }
 
-  async joinRoom(rawCode: string): Promise<void> {
+  /** Matchmade room: everyone expected is here, so start right away. */
+  private checkAutoStart(): void {
+    const h = this.host;
+    if (!h || !this.expected || h.session) return;
+    const present = new Set(h.room.members.map((m) => m.pid));
+    for (const uid of this.expected.keys()) if (!present.has(uid)) return;
+    this.startMatch();
+  }
+
+  /** A matchmade player went elsewhere: don't wait for them. */
+  forgetExpected(uid: string): void {
+    this.expected?.delete(uid);
+    this.checkAutoStart();
+  }
+
+  async joinRoom(rawCode: string, opts: { auto?: boolean } = {}): Promise<void> {
     if (this.active || roomBusy.value) return;
     const code = normalizeRoomCode(rawCode);
     if (!isRoomCode(code)) {
@@ -113,7 +152,12 @@ export class RoomController {
     let sig: Signaling | null = null;
     try {
       sig = this.makeSignaling();
-      const info = await sig.findRoom(code);
+      let info = await sig.findRoom(code);
+      // matchmade/party joins may race the host opening the room: retry briefly
+      for (let i = 0; !info && opts.auto && i < 8; i++) {
+        await new Promise((r) => setTimeout(r, 1000));
+        info = await sig.findRoom(code);
+      }
       if (!info) throw new Error(`No open room with code ${code}${sig.kind === 'local' ? ' on this device' : ''}.`);
       if (info.version !== PROTOCOL_VERSION) throw new Error('That room runs a different game version. Refresh both pages.');
       roomBusy.value = 'CONNECTING';
@@ -130,7 +174,14 @@ export class RoomController {
         chat: [],
         mode: sig.kind,
       };
-      client.onRoom = (room) => this.updateRoom(room);
+      this.autoReady = !!opts.auto;
+      client.onRoom = (room) => {
+        this.updateRoom(room);
+        if (this.autoReady) {
+          this.autoReady = false;
+          client.setReady(true);
+        }
+      };
       client.onChat = (line) => this.pushChat(line);
       client.onStart = (session) => {
         this.game.beginMatch(session);
@@ -166,9 +217,12 @@ export class RoomController {
 
   /** Host: start a match with everyone in the room. */
   startMatch(): void {
+    if (this.autoTimer) clearTimeout(this.autoTimer);
+    this.autoTimer = null;
+    this.expected = null;
     if (!this.host || this.host.session) return;
     const session = this.host.startMatch();
-    this.game.beginMatch(session);
+    this.game.beginMatch(session, { host: true, pids: this.host.humanPids() });
     screen.value = 'match';
   }
 
@@ -187,6 +241,10 @@ export class RoomController {
   }
 
   private cleanup(): void {
+    if (this.autoTimer) clearTimeout(this.autoTimer);
+    this.autoTimer = null;
+    this.expected = null;
+    if (this.host) this.onHostedRoom?.(null);
     this.stopAccept?.();
     this.stopAccept = null;
     if (this.signaling) {

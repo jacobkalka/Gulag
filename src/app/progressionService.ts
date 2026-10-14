@@ -16,12 +16,19 @@ export interface MatchAward {
   won: boolean;
 }
 
-export type PersistFn = (p: Profile, award: MatchAward, summary: MatchSummary) => Promise<void>;
+/**
+ * Saves a match result. Local mode stores the computed profile; the online backend claims XP
+ * from the host's match record instead and returns the award actually granted (the UI then
+ * shows that), or null when nothing could be claimed.
+ */
+export type PersistFn = (p: Profile, award: MatchAward, summary: MatchSummary) => Promise<MatchAward | null | void>;
 
 let persist: PersistFn = async (p) => saveLocalProfile(p);
+let online = false;
 
-export function setProfilePersistence(fn: PersistFn): void {
+export function setProfilePersistence(fn: PersistFn, isOnline = false): void {
   persist = fn;
+  online = isOnline;
 }
 
 export function computeAward(summary: MatchSummary, botMatch: boolean, xpBefore: number): MatchAward {
@@ -51,6 +58,16 @@ export function computeAward(summary: MatchSummary, botMatch: boolean, xpBefore:
 export async function awardMatch(summary: MatchSummary, botMatch: boolean): Promise<MatchAward> {
   const p = profile.value;
   const award = computeAward(summary, botMatch, p.xp);
+  if (online) {
+    // the profile listener applies the validated result; show what was actually granted
+    try {
+      const granted = await persist(p, award, summary);
+      if (granted) return granted;
+    } catch (e) {
+      console.warn('XP claim failed', e);
+    }
+    return { ...award, lines: [{ label: 'No XP recorded (host left or match too short)', count: 0, xp: 0 }], total: 0, xpAfter: p.xp, levelAfter: award.levelBefore, unlocks: [] };
+  }
   const lp = summary.local;
   const st = { ...p.stats };
   if (lp) {

@@ -24,6 +24,8 @@ export interface MatchSession {
   readonly rules: MatchRules;
   readonly world: CollisionWorld;
   readonly playlistId: string;
+  /** Identifier of this match (match records / XP claims). */
+  readonly matchId?: string;
   /** All players. For the local player this is the predicted/authoritative state. */
   readonly players: PlayerState[];
   readonly round: RoundState;

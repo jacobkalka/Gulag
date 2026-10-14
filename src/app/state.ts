@@ -105,13 +105,29 @@ export function dismissToast(id: number): void {
   toasts.value = toasts.value.filter((t) => t.id !== id);
 }
 
-/** Persist the local profile (guest / offline). Remote profiles are saved by the backend. */
+let loadoutSaver: ((l: Loadout) => Promise<void>) | null = null;
+
+/** Installed by the online backend: loadouts are stored in the Firestore profile. */
+export function setLoadoutSaver(fn: ((l: Loadout) => Promise<void>) | null): void {
+  loadoutSaver = fn;
+}
+
+/** Persist the local profile (offline mode only; online profiles live in Firestore). */
 export function saveLocalProfile(p: Profile): void {
   profile.value = p;
-  if (!p.guest && !p.uid.startsWith('local-')) return;
+  if (loadoutSaver) return;
   try {
     localStorage.setItem(PKEY, JSON.stringify(p));
   } catch {
     /* ignore */
   }
+}
+
+/** Equips a loadout (anything not unlocked is replaced) and saves it. */
+export async function updateLoadout(l: Loadout): Promise<void> {
+  const p = profile.value;
+  const clean = sanitizeLoadout(l, levelForXp(p.xp).level);
+  profile.value = { ...p, loadout: clean };
+  if (loadoutSaver) await loadoutSaver(clean);
+  else saveLocalProfile(profile.value);
 }

@@ -53,6 +53,11 @@ describe('rooms and signaling', () => {
     await assertSucceeds(get(ref(rtdb('alice'), 'signals/alice')));
     await assertFails(set(ref(rtdb('bob'), 'signals/alice/m1'), { ...msg, kind: 'answer' })); // no overwrite
     await assertSucceeds(remove(ref(rtdb('alice'), 'signals/alice/m1')));
+    // the owner may clear the whole inbox (stale signals from a previous session), nobody else
+    await assertSucceeds(set(ref(rtdb('bob'), 'signals/alice/m5'), msg));
+    await assertFails(remove(ref(rtdb('bob'), 'signals/alice')));
+    await assertFails(set(ref(rtdb('alice'), 'signals/alice'), { x: { from: 'alice', kind: 'bye', ts: now() } }));
+    await assertSucceeds(remove(ref(rtdb('alice'), 'signals/alice')));
   });
 });
 
