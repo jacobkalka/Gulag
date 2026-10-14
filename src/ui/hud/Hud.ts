@@ -80,6 +80,8 @@ export class Hud {
   private perf: HTMLDivElement;
   private conn: HTMLDivElement;
   private markers: HTMLDivElement;
+  private captions: HTMLDivElement;
+  private captionSeen = new Map<string, number>();
   private lowerHud: HTMLElement[] = [];
   private lastPips = '';
   localTeam: 0 | 1 = 0;
@@ -94,6 +96,7 @@ export class Hud {
     this.hit = el('div', 'hud-hit', this.root, '<i></i><i></i><i></i><i></i>');
     this.dmgRing = el('div', 'hud-dmg-ring', this.root);
     this.markers = el('div', 'hud-markers', this.root);
+    this.captions = el('div', 'hud-captions', this.root);
     this.nums = el('div', 'hud-nums', this.root);
     this.scope = el('div', 'hud-scope', this.root, '<div class="hud-scope-reticle"></div>');
     // health
@@ -293,6 +296,29 @@ export class Hud {
       e.classList.add('out');
       setTimeout(() => e.remove(), 400);
     }, 5000);
+  }
+
+  /**
+   * Audio-cue caption (accessibility). `dir` is the cue's bearing relative to where the player
+   * looks (radians, 0 = ahead, positive = left) or null for non-directional cues.
+   */
+  caption(text: string, dir: number | null, kind: 'enemy' | 'ally' | 'info' = 'info'): void {
+    const now = performance.now();
+    const key = `${text}|${kind}`;
+    if (now - (this.captionSeen.get(key) ?? -1e9) < 1200) return;
+    this.captionSeen.set(key, now);
+    let arrow = '';
+    if (dir !== null) {
+      const arrows = ['↑', '↖', '←', '↙', '↓', '↘', '→', '↗'];
+      const i = Math.round((((dir % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2)) / (Math.PI / 4)) % 8;
+      arrow = arrows[i];
+    }
+    const e = el('div', `hud-caption ${kind}`, this.captions, `${arrow ? `<b>${arrow}</b> ` : ''}${esc(text)}`);
+    while (this.captions.children.length > 4) this.captions.firstElementChild?.remove();
+    setTimeout(() => {
+      e.classList.add('out');
+      setTimeout(() => e.remove(), 400);
+    }, 2200);
   }
 
   showBanner(title: string, sub = '', kind: 'neutral' | 'win' | 'lose' | 'warn' | 'count' = 'neutral', duration = 2.2): void {

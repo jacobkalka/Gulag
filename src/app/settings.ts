@@ -44,6 +44,8 @@ export interface Settings {
   showPing: boolean;
   colorblind: ColorblindMode;
   subtitles: boolean;
+  /** Reduces camera shake, roll, head/weapon bob and motion blur (motion sickness). */
+  reduceMotion: boolean;
   // gameplay
   botDifficulty: 'recruit' | 'regular' | 'veteran';
 }
@@ -80,6 +82,7 @@ export const DEFAULT_SETTINGS: Settings = {
   showPing: true,
   colorblind: 'off',
   subtitles: false,
+  reduceMotion: false,
   botDifficulty: 'regular',
 };
 

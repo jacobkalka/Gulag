@@ -59,7 +59,7 @@ export class GameController {
       ...DEFAULT_RENDER_OPTIONS,
       quality,
       resolutionScale: st.resolutionScale,
-      motionBlur: st.motionBlur,
+      motionBlur: st.motionBlur && !st.reduceMotion,
       chromaticAberration: st.chromaticAberration,
       filmGrain: st.filmGrain,
       vignette: st.vignette,
@@ -113,7 +113,7 @@ export class GameController {
     this.renderer.setOptions({
       quality: QUALITY_PRESETS[s.quality],
       resolutionScale: s.resolutionScale,
-      motionBlur: s.motionBlur,
+      motionBlur: s.motionBlur && !s.reduceMotion,
       chromaticAberration: s.chromaticAberration,
       filmGrain: s.filmGrain,
       vignette: s.vignette,

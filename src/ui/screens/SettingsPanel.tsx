@@ -151,7 +151,16 @@ export function SettingsPanel(props: { game: GameController; compact?: boolean }
                 ]}
                 onChange={(v) => set({ colorblind: v }, 'hud')}
               />
-              <Toggle label="Audio cue subtitles" value={s.subtitles} onChange={(v) => set({ subtitles: v })} />
+              <Toggle label="Audio cue subtitles" value={s.subtitles} onChange={(v) => set({ subtitles: v })} hint="Captions with direction for gunfire, footsteps, grenades and reloads" />
+              <Toggle
+                label="Reduce motion"
+                value={s.reduceMotion}
+                onChange={(v) => {
+                  set({ reduceMotion: v });
+                  props.game.applyGraphicsSettings();
+                }}
+                hint="Less camera shake, roll and weapon bob; disables motion blur"
+              />
             </div>
           </div>
         )}

@@ -121,6 +121,9 @@ export class Viewmodel {
     }
   }
 
+  /** 1 = full weapon bob/sway, lower for the reduce-motion setting. */
+  motionScale = 1;
+
   setWeapon(id: string): void {
     if (this.weapon) this.holder.remove(this.weapon.root);
     this.weapon = buildWeapon(this.lib, id);
@@ -181,7 +184,7 @@ export class Viewmodel {
     this.sway.y = damp(this.sway.y, clamp(st.lookDY * 4, -0.05, 0.05), 10, dt);
     const speed = st.grounded ? st.moveSpeed : 0;
     this.bobT += dt * (5 + speed * 1.3);
-    const bobAmt = Math.min(1, speed / 6) * (1 - st.ads * 0.85);
+    const bobAmt = Math.min(1, speed / 6) * (1 - st.ads * 0.85) * this.motionScale;
     const bobX = Math.sin(this.bobT) * 0.012 * bobAmt;
     const bobY = -Math.abs(Math.cos(this.bobT)) * 0.012 * bobAmt;
     // --- recoil recovery
@@ -208,7 +211,7 @@ export class Viewmodel {
     // crouch: slight cant
     rz += st.crouch * 0.05 * (1 - ads);
     // sway + bob
-    const swayScale = 1 - ads * 0.7;
+    const swayScale = (1 - ads * 0.7) * (0.4 + 0.6 * this.motionScale);
     pos.x += (this.sway.x + bobX) * swayScale;
     pos.y += (this.sway.y + bobY) * swayScale;
     ry += this.sway.x * 1.2 * swayScale;

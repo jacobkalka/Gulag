@@ -341,6 +341,8 @@ export class MatchView {
           const d = Math.hypot(shooter.x - this.camera.position.x, shooter.z - this.camera.position.z);
           const occluded = !s.world.lineOfSight(this.camera.position.x, this.camera.position.y, this.camera.position.z, mp.x, mp.y, mp.z);
           audio.play(`gun_${w.id}`, { pos: mp, volume: 1.0, lowpass: occluded ? 900 : d > 25 ? 3500 : undefined });
+          const ally = local && shooter.team === local.team;
+          this.cue(ally ? 'ALLY GUNFIRE' : occluded ? 'GUNFIRE (MUFFLED)' : 'ENEMY GUNFIRE', mp.x, mp.z, ally ? 'ally' : 'enemy', 60);
         }
         break;
       }
@@ -379,7 +381,10 @@ export class MatchView {
         // near-miss whiz for the local player
         if (!isLocal && !e.impactOnly && local && local.alive && t.hitPlayer !== localId) {
           const d = segPointDist(t.ox, t.oy, t.oz, t.ex, t.ey, t.ez, local.x, local.y + 1.5, local.z);
-          if (d < 1.2) audio.play('whiz', { volume: 0.5 });
+          if (d < 1.2) {
+            audio.play('whiz', { volume: 0.5 });
+            this.cue('BULLET PASSES BY', t.ox, t.oz, 'enemy', 200);
+          }
         }
         break;
       }
@@ -432,7 +437,10 @@ export class MatchView {
           }
         } else {
           const p = s.players.find((q) => q.id === e.player);
-          if (p) audio.play('magOut', { pos: { x: p.x, y: p.y + 1.2, z: p.z }, volume: 0.4 });
+          if (p) {
+            audio.play('magOut', { pos: { x: p.x, y: p.y + 1.2, z: p.z }, volume: 0.4 });
+            if (local && p.team !== local.team) this.cue('ENEMY RELOADING', p.x, p.z, 'enemy', 18);
+          }
         }
         break;
       }
@@ -465,11 +473,13 @@ export class MatchView {
       case 'grenade': {
         const p = s.players.find((q) => q.id === e.owner);
         if (p) audio.play('pin', p.id === localId ? { volume: 0.6 } : { pos: { x: e.x, y: e.y, z: e.z }, volume: 0.6 });
+        if (p && local && p.id !== localId) this.cue(p.team === local.team ? 'ALLY GRENADE OUT' : 'GRENADE PIN PULLED', e.x, e.z, p.team === local.team ? 'ally' : 'enemy', 25);
         break;
       }
       case 'explode': {
         this.effects.explosion(e.x, e.y, e.z, e.kind);
         audio.play(e.kind === 'frag' ? 'explosion' : 'flashbang', { pos: { x: e.x, y: e.y, z: e.z }, volume: 1.2 });
+        this.cue(e.kind === 'frag' ? 'EXPLOSION' : 'FLASHBANG', e.x, e.z, 'info', 50);
         const d = Math.hypot(e.x - this.camera.position.x, e.y - this.camera.position.y, e.z - this.camera.position.z);
         this.shake = Math.min(1.5, this.shake + Math.max(0, 1 - d / 14) * (e.kind === 'frag' ? 1.2 : 0.5));
         break;
@@ -534,11 +544,12 @@ export class MatchView {
       s.renderPose(local.id, this.pose);
       const eye = local.slideT > 0 ? MOVE.eyeSlide : eyeHeight({ ...local, crouch: this.pose.crouch } as PlayerState);
       this.eyeSmooth = damp(this.eyeSmooth, eye, 18, dt);
-      const shakeX = (Math.random() - 0.5) * this.shake * 0.04;
-      const shakeY = (Math.random() - 0.5) * this.shake * 0.04;
-      this.camera.position.set(this.pose.x, this.pose.y + this.eyeSmooth - this.landDip, this.pose.z);
+      const motion = st.reduceMotion ? 0.15 : 1;
+      const shakeX = (Math.random() - 0.5) * this.shake * 0.04 * motion;
+      const shakeY = (Math.random() - 0.5) * this.shake * 0.04 * motion;
+      this.camera.position.set(this.pose.x, this.pose.y + this.eyeSmooth - this.landDip * motion, this.pose.z);
       // slide / lean roll
-      const targetRoll = local.slideT > 0 ? 0.08 : 0;
+      const targetRoll = local.slideT > 0 && !st.reduceMotion ? 0.08 : 0;
       this.camRoll = damp(this.camRoll, targetRoll, 10, dt);
       const pitch = input.pitch + this.punch * 0.012 + shakeY;
       this.camera.rotation.set(pitch, input.yaw + shakeX, this.camRoll, 'YXZ');
@@ -691,7 +702,11 @@ export class MatchView {
     const name = STEP_SOUND[surf] ?? 'stepConcrete';
     const vol = (p.sprinting ? 0.85 : p.crouch > 0.5 ? 0.25 : 0.55) * (isLocal ? 0.45 : 1);
     if (isLocal) audio.play(name, { volume: vol });
-    else audio.play(name, { pos: { x: p.x, y: p.y, z: p.z }, volume: vol * 1.4 });
+    else {
+      audio.play(name, { pos: { x: p.x, y: p.y, z: p.z }, volume: vol * 1.4 });
+      const local = this.localPlayer();
+      if (local && p.team !== local.team && p.crouch < 0.5) this.cue(p.sprinting ? 'RUNNING FOOTSTEPS' : 'FOOTSTEPS', p.x, p.z, 'enemy', 14);
+    }
   }
 
   private updateViewmodel(dt: number, local: PlayerState | undefined): void {
@@ -712,6 +727,7 @@ export class MatchView {
     this.hud.setScope(scoped);
     this.vm.syncFromWorld(this.camera, this.mapView.lights.nearestActive(this.camera.position, 4), this.env);
     const look = this.o.input.takeLook();
+    this.vm.motionScale = settings.value.reduceMotion ? 0.2 : 1;
     this.vm.update(dt, {
       ads: local.ads,
       sprint: local.sprinting ? 1 : 0,
@@ -822,6 +838,22 @@ export class MatchView {
   }
 
   // ------------------------------------------------------------------ helpers
+
+  /** Accessibility caption for a sound at a world position (bearing relative to the view). */
+  private cue(text: string, x: number | null, z: number | null, kind: 'enemy' | 'ally' | 'info' = 'info', maxDist = 40): void {
+    if (!settings.value.subtitles) return;
+    if (x === null || z === null) {
+      this.hud.caption(text, null, kind);
+      return;
+    }
+    const cx = this.camera.position.x;
+    const cz = this.camera.position.z;
+    const d = Math.hypot(x - cx, z - cz);
+    if (d > maxDist) return;
+    // world bearing to the source, same convention as yaw (0 = -Z, positive = turning left)
+    const bearing = Math.atan2(-(x - cx), -(z - cz));
+    this.hud.caption(d < 1.5 ? `${text} (CLOSE)` : text, wrapAngle(bearing - this.o.input.yaw), kind);
+  }
 
   private project(x: number, y: number, z: number): { x: number; y: number } | null {
     const v = new THREE.Vector3(x, y, z).project(this.camera);
