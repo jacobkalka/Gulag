@@ -1,0 +1,89 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "status": {
+      "$uid": {
+        ".read": "auth != null",
+        ".write": "auth != null && auth.uid === $uid",
+        ".validate": "newData.hasChildren(['state', 'ts']) && newData.child('state').isString() && newData.child('state').val().matches(/^(online|offline|lobby|room|queue|match)$/) && newData.child('ts').isNumber() && (!newData.child('name').exists() || (newData.child('name').isString() && newData.child('name').val().length <= 16)) && (!newData.child('party').exists() || newData.child('party').isString())"
+      }
+    },
+    "rooms": {
+      "$code": {
+        ".read": "auth != null",
+        ".write": "auth != null && ((!data.exists() && newData.child('hostId').val() === auth.uid) || (data.exists() && data.child('hostId').val() === auth.uid))",
+        ".validate": "!newData.exists() || ($code.matches(/^[A-HJ-NP-Z2-9]{6}$/) && newData.hasChildren(['hostId', 'hostName', 'playlist', 'players', 'capacity', 'version', 'ts']) && newData.child('players').isNumber() && newData.child('capacity').isNumber() && newData.child('hostName').isString() && newData.child('hostName').val().length <= 16)"
+      }
+    },
+    "signals": {
+      "$to": {
+        ".read": "auth != null && auth.uid === $to",
+        "$msg": {
+          ".write": "auth != null && ((!data.exists() && newData.child('from').val() === auth.uid) || (data.exists() && !newData.exists() && (auth.uid === $to || data.child('from').val() === auth.uid)))",
+          ".validate": "!newData.exists() || (newData.hasChildren(['from', 'kind', 'ts']) && newData.child('kind').isString() && newData.child('kind').val().matches(/^(offer|answer|ice|bye)$/) && (!newData.child('data').exists() || (newData.child('data').isString() && newData.child('data').val().length < 16000)))"
+        }
+      }
+    },
+    "parties": {
+      "$pid": {
+        ".read": "auth != null",
+        ".write": "auth != null && ((!data.exists() && newData.child('leader').val() === auth.uid && newData.child('members').child(auth.uid).exists()) || (data.exists() && data.child('leader').val() === auth.uid))",
+        ".validate": "!newData.exists() || (newData.hasChildren(['leader', 'state', 'playlist', 'ts']) && newData.child('members').child(newData.child('leader').val()).exists())",
+        "state": {
+          ".validate": "newData.isString() && newData.val().matches(/^(idle|queue|room)$/)"
+        },
+        "playlist": {
+          ".validate": "newData.isString() && newData.val().matches(/^(1v1|2v2|3v3|4v4)$/)"
+        },
+        "room": {
+          ".validate": "newData.isString() && newData.val().matches(/^[A-HJ-NP-Z2-9]{6}$/)"
+        },
+        "seats": {
+          "$seat": {
+            ".write": "auth != null && data.parent().parent().exists() && ((!data.exists() && newData.val() === auth.uid) || (data.val() === auth.uid && !newData.exists()))",
+            ".validate": "$seat.matches(/^s[0-3]$/) && newData.isString()"
+          }
+        },
+        "members": {
+          "$uid": {
+            ".write": "auth != null && auth.uid === $uid && data.parent().parent().exists()",
+            ".validate": "!newData.exists() || (newData.hasChildren(['name', 'seat', 'ts']) && newData.child('name').isString() && newData.child('name').val().length <= 16 && newData.child('seat').isString() && newData.parent().parent().child('seats').child(newData.child('seat').val()).val() === $uid)"
+          }
+        }
+      }
+    },
+    "invites": {
+      "$to": {
+        ".read": "auth != null && auth.uid === $to",
+        "$from": {
+          ".write": "auth != null && (auth.uid === $from || (auth.uid === $to && !newData.exists()))",
+          ".validate": "!newData.exists() || (newData.hasChildren(['party', 'fromName', 'ts']) && newData.child('party').isString() && newData.child('fromName').isString() && newData.child('fromName').val().length <= 16)"
+        }
+      }
+    },
+    "partyChat": {
+      "$pid": {
+        ".read": "auth != null && root.child('parties').child($pid).child('members').child(auth.uid).exists()",
+        ".write": "auth != null && !newData.exists() && root.child('parties').child($pid).child('leader').val() === auth.uid",
+        "$msg": {
+          ".write": "auth != null && !data.exists() && newData.child('uid').val() === auth.uid && root.child('parties').child($pid).child('members').child(auth.uid).exists()",
+          ".validate": "newData.hasChildren(['uid', 'name', 'text', 'ts']) && newData.child('text').isString() && newData.child('text').val().length <= 140 && newData.child('name').isString() && newData.child('name').val().length <= 16"
+        }
+      }
+    },
+    "queue": {
+      "$playlist": {
+        ".read": "auth != null",
+        "$ticket": {
+          ".write": "auth != null && auth.uid === $ticket",
+          ".validate": "!newData.exists() || ($playlist.matches(/^(1v1|2v2|3v3|4v4)$/) && newData.hasChildren(['size', 'names', 'ts', 'version']) && newData.child('size').isNumber() && newData.child('size').val() >= 1 && newData.child('size').val() <= 4)",
+          "assign": {
+            ".write": "auth != null && (auth.uid === $ticket || (!data.exists() && newData.exists() && newData.child('host').val() === auth.uid && root.child('queue').child($playlist).child(auth.uid).exists()))",
+            ".validate": "!newData.exists() || (newData.hasChildren(['host', 'room', 'team', 'ts']) && newData.child('room').isString() && newData.child('room').val().matches(/^[A-HJ-NP-Z2-9]{6}$/) && (newData.child('team').val() === 0 || newData.child('team').val() === 1))"
+          }
+        }
+      }
+    }
+  }
+}

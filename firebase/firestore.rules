@@ -1,0 +1,244 @@
+rules_version = '2';
+
+// LOCKDOWN - Cloud Firestore security rules.
+//
+// Collections
+//   users/{uid}                  public profile, XP, stats, loadout (owner-writable, validated)
+//   users/{uid}/claims/{matchId} one XP claim per match (create-only)
+//   usernames/{lower}            unique username registry -> { uid }
+//   friendCodes/{code}           unique friend code registry -> { uid }
+//   friendships/{a_b}            friend requests and friendships (a < b)
+//   matches/{matchId}            host-reported match records used to validate XP claims
+//
+// Trust model: there is no game server. The host's browser simulates the match and reports
+// results here. A player can only claim XP that the formula below allows for the result the
+// host reported for them, at most once per match, and loadouts must be unlocked by XP.
+// A cheating *host* can still fabricate a record; the per-match cap and the minimum match
+// duration bound how fast that can farm XP (see README "Known limitations").
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isUser(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    function userDoc(uid) {
+      return /databases/$(database)/documents/users/$(uid);
+    }
+
+    // <generated:unlocks> Regenerate with: UPDATE_RULES=1 npx vitest run src/backend/__tests__/rulesSync.test.ts
+    function primaryXp() {
+      return {'rook9': 0, 'kestrel': 2273, 'riptide': 39242, 'halberd': 0, 'talon': 15840, 'cinder': 6465, 'anvil': 55546, 'thresher': 600, 'cyclone': 82385, 'lancet': 10574, 'vigil': 154604, 'bulwark': 115319};
+    }
+    function secondaryXp() {
+      return {'warden': 0, 'ironjaw': 3426, 'wasp': 26062};
+    }
+    function flashXp() {
+      return 1340;
+    }
+    // </generated:unlocks>
+
+    function validLoadout(l, xp) {
+      return l is map
+        && l.keys().hasOnly(['primary', 'secondary', 'lethal', 'tactical'])
+        && l.primary is string && l.primary in primaryXp() && primaryXp()[l.primary] <= xp
+        && l.secondary is string && l.secondary in secondaryXp() && secondaryXp()[l.secondary] <= xp
+        && l.lethal in ['frag', 'none']
+        && (l.tactical == 'none' || (l.tactical == 'flash' && flashXp() <= xp));
+    }
+
+    function zeroStats(s) {
+      return s is map
+        && s.keys().hasOnly(['kills', 'deaths', 'assists', 'damage', 'headshots', 'shots', 'hits', 'captures', 'roundsWon', 'wins', 'losses', 'matches'])
+        && s.kills == 0 && s.deaths == 0 && s.assists == 0 && s.damage == 0 && s.headshots == 0
+        && s.shots == 0 && s.hits == 0 && s.captures == 0 && s.roundsWon == 0 && s.wins == 0
+        && s.losses == 0 && s.matches == 0;
+    }
+
+    function validName(n) {
+      return n is string && n.matches('^[A-Za-z0-9_]{3,16}$');
+    }
+
+    // Plausibility bounds for one player's host-reported result.
+    function plausible(r) {
+      return r is map
+        && r.kills is int && r.kills >= 0 && r.kills <= 40
+        && r.deaths is int && r.deaths >= 0 && r.deaths <= 10
+        && r.assists is int && r.assists >= 0 && r.assists <= 40
+        && r.headshots is int && r.headshots >= 0 && r.headshots <= r.kills
+        && r.damage is int && r.damage >= 0 && r.damage <= 10000
+        && r.shots is int && r.shots >= 0 && r.shots <= 5000
+        && r.hits is int && r.hits >= 0 && r.hits <= r.shots
+        && r.captures is int && r.captures >= 0 && r.captures <= 10
+        && r.roundsWon is int && r.roundsWon >= 0 && r.roundsWon <= 5
+        && r.won is bool;
+    }
+
+    // XP formula mirrored from src/data/progression.ts (computeMatchXp + MAX_MATCH_XP),
+    // halved for practice matches (fewer than two humans).
+    function maxXp(r, humans) {
+      let full = r.kills * 100 + r.headshots * 25 + r.assists * 50 + r.captures * 200
+        + r.roundsWon * 150 + (r.won ? 500 : 0) + (r.damage - r.damage % 10) / 10 * 2 + 100;
+      let capped = full > 6000 ? 6000 : full;
+      return humans < 2 ? capped / 2 + 1 : capped;
+    }
+
+    function progressUnchanged() {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['xp', 'stats', 'lastClaim']);
+    }
+
+    function validClaim(uid) {
+      let d = request.resource.data;
+      let o = resource.data;
+      let mid = d.lastClaim;
+      let m = get(/databases/$(database)/documents/matches/$(mid)).data;
+      let r = m.results[uid];
+      let dxp = d.xp - o.xp;
+      return mid is string && mid != o.lastClaim
+        && m.state == 'done'
+        && uid in m.results
+        && plausible(r)
+        && !exists(/databases/$(database)/documents/users/$(uid)/claims/$(mid))
+        && existsAfter(/databases/$(database)/documents/users/$(uid)/claims/$(mid))
+        && d.xp is int && dxp >= 0 && dxp <= maxXp(r, m.humans.size())
+        && d.stats.kills == o.stats.kills + r.kills
+        && d.stats.deaths == o.stats.deaths + r.deaths
+        && d.stats.assists == o.stats.assists + r.assists
+        && d.stats.damage == o.stats.damage + r.damage
+        && d.stats.headshots == o.stats.headshots + r.headshots
+        && d.stats.shots == o.stats.shots + r.shots
+        && d.stats.hits == o.stats.hits + r.hits
+        && d.stats.captures == o.stats.captures + r.captures
+        && d.stats.roundsWon == o.stats.roundsWon + r.roundsWon
+        && d.stats.matches == o.stats.matches + 1
+        && d.stats.wins == o.stats.wins + (r.won ? 1 : 0)
+        && d.stats.losses == o.stats.losses + (r.won ? 0 : 1)
+        && d.stats.keys().hasOnly(o.stats.keys());
+    }
+
+    function nameUnchanged() {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['username', 'usernameLower']);
+    }
+
+    function nameClaimed(uid) {
+      let d = request.resource.data;
+      return validName(d.username)
+        && d.usernameLower == d.username.lower()
+        && getAfter(/databases/$(database)/documents/usernames/$(d.usernameLower)).data.uid == uid;
+    }
+
+    match /users/{uid} {
+      allow read: if signedIn();
+      allow create: if isUser(uid)
+        && request.resource.data.keys().hasOnly(['username', 'usernameLower', 'friendCode', 'xp', 'loadout', 'stats', 'createdAt', 'updatedAt', 'lastClaim'])
+        && nameClaimed(uid)
+        && getAfter(/databases/$(database)/documents/friendCodes/$(request.resource.data.friendCode)).data.uid == uid
+        && request.resource.data.xp == 0
+        && zeroStats(request.resource.data.stats)
+        && validLoadout(request.resource.data.loadout, 0)
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.lastClaim == '';
+      allow update: if isUser(uid)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['username', 'usernameLower', 'xp', 'loadout', 'stats', 'updatedAt', 'lastClaim'])
+        && request.resource.data.updatedAt == request.time
+        && (nameUnchanged() || nameClaimed(uid))
+        && validLoadout(request.resource.data.loadout, request.resource.data.xp)
+        && (progressUnchanged() || validClaim(uid));
+      allow delete: if false;
+
+      match /claims/{mid} {
+        allow read: if isUser(uid);
+        allow create: if isUser(uid)
+          && request.resource.data.keys().hasOnly(['xp', 'at'])
+          && request.resource.data.at == request.time
+          && getAfter(userDoc(uid)).data.lastClaim == mid
+          && request.resource.data.xp == getAfter(userDoc(uid)).data.xp - get(userDoc(uid)).data.xp;
+        allow update, delete: if false;
+      }
+    }
+
+    match /usernames/{name} {
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && name.matches('^[a-z0-9_]{3,16}$')
+        && request.resource.data.keys().hasOnly(['uid'])
+        && request.resource.data.uid == request.auth.uid
+        && getAfter(userDoc(request.auth.uid)).data.usernameLower == name;
+      // release your old name when renaming
+      allow delete: if signedIn()
+        && resource.data.uid == request.auth.uid
+        && getAfter(userDoc(request.auth.uid)).data.usernameLower != name;
+      allow update: if false;
+    }
+
+    match /friendCodes/{code} {
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && code.matches('^[A-HJ-NP-Z2-9]{6}$')
+        && request.resource.data.keys().hasOnly(['uid'])
+        && request.resource.data.uid == request.auth.uid
+        && getAfter(userDoc(request.auth.uid)).data.friendCode == code;
+      allow update, delete: if false;
+    }
+
+    match /friendships/{pair} {
+      function pairOk(d) {
+        return d.users is list && d.users.size() == 2
+          && d.users[0] is string && d.users[1] is string
+          && d.users[0] < d.users[1]
+          && pair == d.users[0] + '_' + d.users[1];
+      }
+      allow read: if signedIn() && request.auth.uid in resource.data.users;
+      allow create: if signedIn()
+        && pairOk(request.resource.data)
+        && request.auth.uid in request.resource.data.users
+        && request.resource.data.keys().hasOnly(['users', 'requester', 'status', 'names', 'createdAt', 'updatedAt'])
+        && request.resource.data.requester == request.auth.uid
+        && request.resource.data.status == 'pending'
+        && request.resource.data.names is map
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+      // only the person who received the request can accept it
+      allow update: if signedIn()
+        && request.auth.uid in resource.data.users
+        && request.auth.uid != resource.data.requester
+        && resource.data.status == 'pending'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt', 'names'])
+        && request.resource.data.status == 'accepted'
+        && request.resource.data.updatedAt == request.time;
+      // decline, cancel or unfriend
+      allow delete: if signedIn() && request.auth.uid in resource.data.users;
+    }
+
+    match /matches/{mid} {
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['host', 'playlist', 'humans', 'bots', 'state', 'startedAt', 'endedAt', 'results'])
+        && request.resource.data.host == request.auth.uid
+        && request.resource.data.state == 'live'
+        && request.resource.data.startedAt == request.time
+        && request.resource.data.endedAt == null
+        && request.resource.data.results == {}
+        && request.resource.data.playlist in ['1v1', '2v2', '3v3', '4v4']
+        && request.resource.data.humans is list
+        && request.resource.data.humans.size() >= 1 && request.resource.data.humans.size() <= 8
+        && request.auth.uid in request.resource.data.humans
+        && request.resource.data.bots is int && request.resource.data.bots >= 0 && request.resource.data.bots <= 8;
+      allow update: if signedIn()
+        && resource.data.host == request.auth.uid
+        && resource.data.state == 'live'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['state', 'endedAt', 'results'])
+        && request.resource.data.state == 'done'
+        && request.resource.data.endedAt == request.time
+        && request.time > resource.data.startedAt + duration.value(30, 's')
+        && request.resource.data.results.keys().hasOnly(resource.data.humans);
+      allow delete: if false;
+    }
+  }
+}
