@@ -2,7 +2,7 @@ import { collection, deleteDoc, doc, getDoc, onSnapshot, query, serverTimestamp,
 import { onValue, ref, type Unsubscribe as RtdbUnsub } from 'firebase/database';
 import { levelForXp } from '@/data/progression';
 import { friends, type FriendView, type PresenceState } from '@/app/social';
-import { profile, pushToast } from '@/app/state';
+import { dismissToast, profile, pushToast } from '@/app/state';
 import type { Fb } from './firebase';
 
 // Friends: Firestore friendships/{a_b} documents (pending -> accepted) plus each friend's
@@ -23,6 +23,7 @@ export class FriendsService {
   private presenceUnsubs = new Map<string, RtdbUnsub>();
   private info = new Map<string, { name: string; level: number }>();
   private initial = true;
+  private requestToasts = new Map<string, number>();
 
   constructor(
     private fb: Fb,
@@ -39,7 +40,7 @@ export class FriendsService {
         for (const p of next.values()) {
           if (p.status === 'pending' && p.requester !== this.uid && !this.pairs.has(p.id)) {
             const name = p.names?.[p.requester] ?? 'Someone';
-            pushToast({
+            const id = pushToast({
               title: 'FRIEND REQUEST',
               body: `${name} wants to be friends`,
               kind: 'invite',
@@ -48,7 +49,16 @@ export class FriendsService {
                 { label: 'DECLINE', onClick: () => void this.remove(p.id) },
               ],
             });
+            this.requestToasts.set(p.id, id);
           }
+        }
+      }
+      // requests handled elsewhere (friends list, other device) close their toast
+      for (const [pair, id] of this.requestToasts) {
+        const p = next.get(pair);
+        if (!p || p.status !== 'pending') {
+          dismissToast(id);
+          this.requestToasts.delete(pair);
         }
       }
       this.initial = false;

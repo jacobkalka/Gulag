@@ -11,6 +11,7 @@ import { screen } from '@/app/state';
 import { roomView } from '@/app/rooms';
 import { RoomEntry, RoomPanel } from './Room';
 import { SocialTab } from './Social';
+import { LoadoutTab } from './Loadout';
 import { matchmaking, party, social, account } from '@/app/social';
 import { useEffect, useState } from 'preact/hooks';
 
@@ -131,13 +132,7 @@ export function Lobby(props: { game: GameController }): JSX.Element {
         )}
         {tab === 'stats' && <StatsTab />}
         {tab === 'social' && <SocialTab />}
-        {tab === 'loadout' && (
-          <div class="tab-wrap">
-            <Panel title={tab.toUpperCase()}>
-              <p class="hint big">Coming online in the next milestone.</p>
-            </Panel>
-          </div>
-        )}
+        {tab === 'loadout' && <LoadoutTab game={props.game} onChange={() => props.game.rooms.syncLoadout()} />}
       </main>
       <footer class="lobby-foot">
         <span>SUBLEVEL 9 · {PLAYLISTS[selectedPlaylist.value].name.toUpperCase()}</span>

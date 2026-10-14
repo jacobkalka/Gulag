@@ -16,6 +16,7 @@ import type { PlaylistId } from '@/data/playlists';
 import type { Loadout } from '@/data/progression';
 import type { BotDifficulty } from '@/game/bots/BotBrain';
 import { RoomController } from './rooms';
+import { buildWeapon, type WeaponModel } from '@/assets/models/weapons';
 
 // Owns the renderer, procedural assets, input and the frame loop. Screens (Preact) call
 // into this to start/leave matches; it reports back through callbacks.
@@ -46,6 +47,8 @@ export class GameController {
     end: (session: MatchSession, summary: MatchSummary, meta: MatchMeta) => void;
   }[] = [];
   private matchMeta: MatchMeta = {};
+  /** Loadout screen turntable (lights always exist so toggling never recompiles shaders). */
+  private showcase: { group: THREE.Group; key: THREE.SpotLight; rim: THREE.PointLight; fill: THREE.PointLight; model: WeaponModel | null; id: string | null; t: number; blend: number } | null = null;
 
   constructor(readonly canvas: HTMLCanvasElement, readonly uiRoot: HTMLElement) {
     const st = settings.value;
@@ -142,6 +145,67 @@ export class GameController {
     this.menuCam = cam;
     this.renderer.setScenes(scene, cam);
     this.menuMap.atmosphere.setPixelScale(window.innerHeight);
+    // weapon showcase rig above the drain
+    const group = new THREE.Group();
+    group.position.set(0, 1.32, 0);
+    scene.add(group);
+    const key = new THREE.SpotLight(0xfff6ec, 0, 6, 0.6, 0.5, 1.5);
+    key.position.set(-1.2, 2.6, 1.4);
+    key.target = group;
+    const rim = new THREE.PointLight(0x7fb6ff, 0, 5, 2);
+    rim.position.set(1.1, 1.7, -0.9);
+    const fill = new THREE.PointLight(0xdfe8ff, 0, 4, 2);
+    fill.position.set(0.6, 0.9, 1.2);
+    scene.add(key, rim, fill);
+    this.showcase = { group, key, rim, fill, model: null, id: null, t: 0, blend: 0 };
+  }
+
+  /** Shows a weapon on the menu turntable (loadout screen), or null to return to the lobby view. */
+  setShowcase(id: string | null): void {
+    const sc = this.showcase;
+    if (!sc || sc.id === id) return;
+    sc.id = id;
+    if (sc.model) {
+      sc.group.remove(sc.model.root);
+      sc.model = null;
+    }
+    if (!id) return;
+    const m = buildWeapon(this.assets.materials, id);
+    // center the model on the turntable
+    const box = new THREE.Box3().setFromObject(m.root);
+    const c = box.getCenter(new THREE.Vector3());
+    m.root.position.sub(c);
+    const pivot = new THREE.Group();
+    pivot.add(m.root);
+    sc.group.add(pivot);
+    sc.model = { ...m, root: pivot };
+    sc.t = 0;
+  }
+
+  private updateShowcase(dt: number): boolean {
+    const sc = this.showcase;
+    if (!sc || !this.menuCam) return false;
+    const on = !!sc.id;
+    sc.blend = Math.max(0, Math.min(1, sc.blend + (on ? dt : -dt) * 2.5));
+    const k = sc.blend * sc.blend * (3 - 2 * sc.blend);
+    sc.key.intensity = 16 * k;
+    sc.rim.intensity = 6 * k;
+    sc.fill.intensity = 1.4 * k;
+    if (!sc.model) return k > 0.001;
+    sc.t += dt;
+    const len = sc.model.length || 0.8;
+    sc.model.root.rotation.y = Math.PI / 2 + Math.sin(sc.t * 0.35) * 0.75 + sc.t * 0.05;
+    sc.model.root.rotation.z = Math.sin(sc.t * 0.5) * 0.04;
+    const dist = 0.75 + len * 1.25;
+    // look slightly below the gun so it sits in the upper-middle of the screen above the stats
+    const target = new THREE.Vector3(0, 1.2, 0);
+    const camPos = new THREE.Vector3(0.05, 1.4, dist);
+    if (k < 1) {
+      // blend from the lobby dolly
+      this.menuCam.position.lerp(camPos, Math.min(1, k + 0.02));
+    } else this.menuCam.position.copy(camPos);
+    this.menuCam.lookAt(target);
+    return true;
   }
 
   /** Lobby/menu backdrop: slow dolly through the showers. */
@@ -245,6 +309,7 @@ export class GameController {
       else if (this.menuScene && this.menuCam && this.menuMap) {
         this.menuT += dt;
         this.setMenuCamera(this.menuT);
+        this.updateShowcase(dt);
         this.menuMap.update(this.menuCam, this.menuT, dt);
         this.renderer.render(dt);
       }
