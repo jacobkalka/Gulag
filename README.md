@@ -65,7 +65,7 @@ every gunshot) is generated in code at load time.
 | Scoreboard / pause | Tab / Esc |
 
 Gamepad (standard mapping): sticks move and look, RT fire, LT aim, A jump, B crouch, L3 sprint,
-X reload, Y swap, R3 melee, RB frag. Desktop browsers with a mouse are the target; on phones and
+X reload, Y swap, R3 melee, RB frag, LB flash. Desktop browsers with a mouse are the target; on phones and
 tablets the game shows a "desktop recommended" note.
 
 ## Running it
