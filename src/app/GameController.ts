@@ -296,8 +296,9 @@ export class GameController {
     sc.model.root.rotation.z = Math.sin(sc.t * 0.5) * 0.04;
     const dist = 0.75 + len * 1.25;
     // look slightly below the gun so it sits in the upper-middle of the screen above the stats
-    const target = new THREE.Vector3(0, 1.2, 0);
-    const camPos = new THREE.Vector3(0.05, 1.4, dist);
+    // aim right of the model so it sits left of center, clear of the item list
+    const target = new THREE.Vector3(0.22, 1.2, 0);
+    const camPos = new THREE.Vector3(0.27, 1.4, dist);
     if (k < 1) {
       // blend from the lobby dolly
       this.menuCam.position.lerp(camPos, Math.min(1, k + 0.02));
