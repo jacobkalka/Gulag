@@ -225,8 +225,11 @@ export class Renderer {
     if (this.composer) this.composer.setSize(w, h, false);
   }
 
+  /** When false, frames are skipped entirely (automated network tests, hidden tabs). */
+  enabled = true;
+
   render(dt: number): void {
-    if (this.contextLost || !this.composer) return;
+    if (!this.enabled || this.contextLost || !this.composer) return;
     this.gl.info.reset();
     this.motionBlur?.updateMatrices();
     this.composer.render(dt);

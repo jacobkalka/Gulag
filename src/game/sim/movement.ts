@@ -56,8 +56,10 @@ function pressed(inp: PlayerInput, p: PlayerState, b: number): boolean {
 
 export function stepMovement(p: PlayerState, inp: PlayerInput, world: CollisionWorld, dt: number, frozen: boolean, w: WeaponStats): MoveResult {
   const res: MoveResult = { jumped: false, landed: 0, mantled: false, slid: false };
-  p.yaw = inp.yaw;
-  p.pitch = Math.max(-1.48, Math.min(1.48, inp.pitch));
+  if (inp.life === undefined || inp.life === p.life) {
+    p.yaw = inp.yaw;
+    p.pitch = Math.max(-1.48, Math.min(1.48, inp.pitch));
+  }
   if (p.slideCd > 0) p.slideCd -= dt;
 
   // ---- mantle in progress: scripted arc onto the ledge

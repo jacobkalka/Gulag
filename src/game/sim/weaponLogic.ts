@@ -217,6 +217,6 @@ export function stepWeapon(p: PlayerState, inp: PlayerInput, dt: number, frozen:
   }
   p.fireCd += interval;
   if (p.fireCd < interval * 0.5) p.fireCd = interval;
-  events.push({ type: 'fire', shooter: p.id, weapon: w.id });
+  events.push({ type: 'fire', shooter: p.id, weapon: w.id, n: p.shotCount });
   return { shooter: p.id, weapon: w, seed: (p.id * 7919 + p.shotCount * 104729) >>> 0, yaw: p.yaw, pitch: p.pitch, spread, viewTick: inp.viewTick };
 }

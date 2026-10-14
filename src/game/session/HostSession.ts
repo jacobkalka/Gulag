@@ -2,7 +2,7 @@ import type { MapDef } from '@/game/world/mapTypes';
 import { PLAYLISTS, type PlaylistId } from '@/data/playlists';
 import type { Loadout } from '@/data/progression';
 import { GameSim, type SimPlayerConfig } from '@/game/sim/GameSim';
-import { DT, type GameEvent, type PlayerInput, type PlayerState } from '@/game/sim/types';
+import { BTN, DT, type GameEvent, type PlayerInput, type PlayerState } from '@/game/sim/types';
 import { NavGrid } from '@/game/bots/NavGrid';
 import { BotBrain, type BotDifficulty } from '@/game/bots/BotBrain';
 import { lerpAngle } from '@/shared/math';
@@ -10,6 +10,10 @@ import type { MatchSession, RenderPose } from './Session';
 
 // The authoritative side: runs the GameSim at a fixed 60 Hz with bots, the local player,
 // and (in networked matches) remote players whose inputs arrive over WebRTC.
+
+/** Remote inputs buffered beyond this (100 ms) are dropped instead of delaying the player. */
+const MAX_INPUT_BUFFER = 6;
+const ONE_SHOT_BUTTONS = BTN.JUMP | BTN.RELOAD | BTN.MELEE | BTN.SWAP | BTN.LETHAL | BTN.TACTICAL | BTN.INTERACT | BTN.INSPECT;
 
 const BOT_NAMES = ['Rook', 'Vasquez', 'Brick', 'Nomad', 'Kilo', 'Mags', 'Patch', 'Sable', 'Dutch', 'Ox', 'Juno', 'Wick', 'Shade', 'Tank', 'Echo', 'Vise'];
 
@@ -49,10 +53,14 @@ export class HostSession implements MatchSession {
   /** Called after every simulation tick (host networking hooks in here). */
   onTick: ((events: GameEvent[]) => void) | null = null;
   private left = false;
+  private difficulty: BotDifficulty;
+  private seed: number;
 
   constructor(opts: HostOptions) {
     const pl = PLAYLISTS[opts.playlist];
     this.playlistId = opts.playlist;
+    this.difficulty = opts.difficulty;
+    this.seed = opts.seed ?? 1;
     this.sim = new GameSim(opts.map, pl.rules, opts.seed ?? (Date.now() & 0xffff));
     this.nav = new NavGrid(this.sim.world, opts.map);
     let nextId = 0;
@@ -65,6 +73,7 @@ export class HostSession implements MatchSession {
     } else this.localId = -1;
     for (const r of opts.remotes ?? []) {
       this.sim.addPlayer({ id: r.id, team: r.team, name: r.name, bot: false, loadout: r.loadout });
+      this.remoteQueues.set(r.id, []);
       nextId = Math.max(nextId, r.id + 1);
       counts[r.team]++;
     }
@@ -136,32 +145,68 @@ export class HostSession implements MatchSession {
   removeRemote(id: number): void {
     this.sim.removePlayer(id);
     this.remoteQueues.delete(id);
+    this.lastRemote.delete(id);
+  }
+
+  /** A remote player who disconnected is taken over by a bot for the rest of the match. */
+  botify(id: number): void {
+    const p = this.sim.player(id);
+    if (!p || p.bot) return;
+    this.remoteQueues.delete(id);
+    this.lastRemote.delete(id);
+    p.bot = true;
+    p.name = `${p.name} [BOT]`;
+    this.bots.set(id, new BotBrain(id, this.difficulty, this.seed + id));
+  }
+
+  /** Id of a connected bot that a late joiner on `team` could replace, or -1. */
+  replaceableBot(team: 0 | 1): number {
+    const bot = this.sim.players.find((p) => p.bot && p.team === team && p.connected);
+    return bot ? bot.id : -1;
   }
 
   /** Queue inputs received from a remote player (duplicates from redundancy are dropped). */
   pushRemoteInputs(id: number, inputs: PlayerInput[]): void {
     const q = this.remoteQueues.get(id);
     if (!q) return;
-    const last = this.lastRemote.get(id)?.seq ?? this.sim.player(id)?.lastInputSeq ?? 0;
-    const lastQueued = q.length ? q[q.length - 1].seq : last;
-    for (const inp of inputs) if (inp.seq > lastQueued && inp.seq > last) q.push(inp);
-    // never let a client run ahead too far
-    while (q.length > 12) q.shift();
+    const last = this.lastRemote.get(id)?.seq ?? 0;
+    let lastQueued = q.length ? q[q.length - 1].seq : last;
+    const sorted = inputs.length > 1 ? [...inputs].sort((a, b) => a.seq - b.seq) : inputs;
+    for (const inp of sorted) {
+      if (inp.seq > lastQueued && inp.seq > last) {
+        q.push(inp);
+        lastQueued = inp.seq;
+      }
+    }
   }
 
+  /**
+   * Next input for a remote player. The host never simulates more than one input per player per
+   * tick (a client flooding inputs cannot move faster); if the jitter buffer grows too deep the
+   * oldest inputs are dropped, carrying their one-shot button presses forward.
+   */
   private remoteInput(id: number): PlayerInput | null {
     const q = this.remoteQueues.get(id);
     let inp = q && q.length ? q.shift()! : null;
-    // catch up if the queue grows (client clock running fast): consume one extra
-    if (q && q.length > 4 && inp) inp = q.shift()!;
+    if (q && inp) {
+      while (q.length > MAX_INPUT_BUFFER) {
+        const dropped: PlayerInput = inp;
+        inp = q.shift()!;
+        inp = { ...inp, buttons: inp.buttons | (dropped.buttons & ONE_SHOT_BUTTONS) };
+      }
+    }
     if (inp) {
       this.lastRemote.set(id, inp);
       return inp;
     }
-    // starvation: repeat the last movement but release one-shot buttons
-    const last = this.lastRemote.get(id);
-    if (!last) return null;
-    return { ...last, buttons: last.buttons & ~(32 | 64 | 128 | 256 | 512) };
+    // starvation: repeat the last input (edge-triggered actions cannot re-fire since the
+    // previous buttons are unchanged)
+    return this.lastRemote.get(id) ?? null;
+  }
+
+  /** Inputs waiting in a remote player's jitter buffer (diagnostics). */
+  queuedInputs(id: number): number {
+    return this.remoteQueues.get(id)?.length ?? 0;
   }
 
   update(dt: number, sampleInput: () => PlayerInput): GameEvent[] {
@@ -225,6 +270,13 @@ export class HostSession implements MatchSession {
 
   ping(): number {
     return 0;
+  }
+
+  /** Set by the network host so the scoreboard can show remote players' ping. */
+  pingProvider: ((id: number) => number) | null = null;
+
+  pingOf(id: number): number {
+    return this.pingProvider ? this.pingProvider(id) : 0;
   }
 
   status() {

@@ -1,6 +1,8 @@
 import { defineConfig } from '@playwright/test';
 
 const chromiumPath = process.env.CHROMIUM_PATH || (process.env.CI ? undefined : '/opt/pw-browsers/chromium');
+// E2E_BASE_URL=http://localhost:5173/ runs against an already running dev server.
+const external = process.env.E2E_BASE_URL;
 
 export default defineConfig({
   testDir: 'e2e',
@@ -9,7 +11,7 @@ export default defineConfig({
   workers: 1,
   reporter: [['list']],
   use: {
-    baseURL: 'http://localhost:4173/',
+    baseURL: external ?? 'http://localhost:4173/',
     viewport: { width: 1280, height: 720 },
     launchOptions: {
       executablePath: chromiumPath,
@@ -22,10 +24,12 @@ export default defineConfig({
       ],
     },
   },
-  webServer: {
-    command: 'npm run build && npm run preview',
-    url: 'http://localhost:4173/',
-    reuseExistingServer: !process.env.CI,
-    timeout: 240_000,
-  },
+  webServer: external
+    ? undefined
+    : {
+        command: 'npm run build && npm run preview',
+        url: 'http://localhost:4173/',
+        reuseExistingServer: !process.env.CI,
+        timeout: 240_000,
+      },
 });

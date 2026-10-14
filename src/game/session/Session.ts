@@ -39,6 +39,8 @@ export interface MatchSession {
   setLoadout(l: Loadout): void;
   /** Round-trip time in ms (0 for local). */
   ping(): number;
+  /** Network round trip of any player (scoreboard), when known. */
+  pingOf?(id: number): number;
   /** Connection problems to surface in the HUD. */
   status(): { connected: boolean; message: string };
   leave(): void;

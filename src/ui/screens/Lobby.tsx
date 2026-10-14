@@ -8,6 +8,8 @@ import { Button, Panel, Segmented, Bar } from '../components';
 import { SettingsPanel } from './SettingsPanel';
 import { StatsTab } from './StatsTab';
 import { screen } from '@/app/state';
+import { roomView } from '@/app/rooms';
+import { RoomEntry, RoomPanel } from './Room';
 
 export function TopNav(): JSX.Element {
   const p = profile.value;
@@ -43,6 +45,7 @@ export function TopNav(): JSX.Element {
 }
 
 export function PlayTab(props: { game: GameController }): JSX.Element {
+  if (roomView.value) return <RoomPanel game={props.game} />;
   const pl = selectedPlaylist.value;
   const diff = settings.value.botDifficulty;
   const p = profile.value;
@@ -101,6 +104,7 @@ export function PlayTab(props: { game: GameController }): JSX.Element {
               onChange={(v) => updateSettings({ botDifficulty: v })}
             />
           </div>
+          <RoomEntry game={props.game} />
         </div>
       </div>
     </div>

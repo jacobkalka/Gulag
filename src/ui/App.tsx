@@ -9,6 +9,7 @@ import { PauseMenu } from './screens/PauseMenu';
 import { Results } from './screens/Results';
 import { Button } from './components';
 import { audio } from '@/engine/audio/AudioEngine';
+import { roomView } from '@/app/rooms';
 
 export function Loading(): JSX.Element {
   const l = loading.value;
@@ -111,8 +112,11 @@ export function App(props: { game: GameController }): JSX.Element {
           {paused.value && (
             <PauseMenu
               game={g}
+              inRoom={!!roomView.value}
               onLeave={() => {
                 g.leaveMatch(true);
+                // leaving a networked match mid-way leaves the room (a bot takes your slot)
+                g.rooms.leaveRoom();
                 paused.value = false;
                 screen.value = 'lobby';
               }}
@@ -125,12 +129,20 @@ export function App(props: { game: GameController }): JSX.Element {
         <Results
           summary={lastSummary.value}
           award={award}
+          room={roomView.value ? (roomView.value.role === 'host' ? 'host' : 'client') : null}
           onPlayAgain={() => {
+            if (roomView.value) {
+              g.rooms.returnToRoom();
+              return;
+            }
             const p = profile.value;
             g.startBotMatch(selectedPlaylist.value, settings.value.botDifficulty, p.loadout, p.username);
             screen.value = 'match';
           }}
-          onLobby={() => (screen.value = 'lobby')}
+          onLobby={() => {
+            g.rooms.leaveRoom();
+            screen.value = 'lobby';
+          }}
         />
       )}
       <Toasts />

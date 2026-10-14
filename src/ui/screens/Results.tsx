@@ -9,7 +9,14 @@ import { settings, teamColors } from '@/app/settings';
 import { Button, Bar } from '../components';
 
 /** End-of-match screen: result, scoreboard with per-player stats, XP breakdown, level-ups and unlocks. */
-export function Results(props: { summary: MatchSummary; award: MatchAward | null; onPlayAgain: () => void; onLobby: () => void }): JSX.Element {
+export function Results(props: {
+  summary: MatchSummary;
+  award: MatchAward | null;
+  /** Set when the match was played in a private room (changes the action buttons). */
+  room?: 'host' | 'client' | null;
+  onPlayAgain: () => void;
+  onLobby: () => void;
+}): JSX.Element {
   const { summary, award } = props;
   const won = summary.winner >= 0 && summary.winner === summary.localTeam;
   const draw = summary.winner < 0;
@@ -151,10 +158,10 @@ export function Results(props: { summary: MatchSummary; award: MatchAward | null
       </div>
       <div class="res-actions">
         <Button variant="primary" size="lg" onClick={props.onPlayAgain} testid="play-again">
-          PLAY AGAIN
+          {props.room ? 'BACK TO ROOM' : 'PLAY AGAIN'}
         </Button>
         <Button variant="secondary" size="lg" onClick={props.onLobby} testid="back-lobby">
-          BACK TO LOBBY
+          {props.room ? 'LEAVE ROOM' : 'BACK TO LOBBY'}
         </Button>
       </div>
     </div>

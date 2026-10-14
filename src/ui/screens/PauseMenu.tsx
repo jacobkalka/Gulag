@@ -4,7 +4,7 @@ import type { GameController } from '@/app/GameController';
 import { Button } from '../components';
 import { SettingsPanel } from './SettingsPanel';
 
-export function PauseMenu(props: { game: GameController; onLeave: () => void }): JSX.Element {
+export function PauseMenu(props: { game: GameController; onLeave: () => void; inRoom?: boolean }): JSX.Element {
   const [view, setView] = useState<'main' | 'settings' | 'confirm'>('main');
   return (
     <div class="overlay pause" onClick={(e) => e.stopPropagation()}>
@@ -34,7 +34,13 @@ export function PauseMenu(props: { game: GameController; onLeave: () => void }):
       {view === 'confirm' && (
         <div class="pause-box">
           <div class="pause-title">LEAVE?</div>
-          <div class="pause-sub">You will forfeit this match.</div>
+          <div class="pause-sub">
+            {props.inRoom
+              ? props.game.rooms.isHost
+                ? 'You are the host: leaving ends the match for everyone and closes the room.'
+                : 'You will leave the room. A bot takes over your slot.'
+              : 'You will forfeit this match.'}
+          </div>
           <Button variant="danger" size="lg" onClick={props.onLeave}>
             LEAVE MATCH
           </Button>

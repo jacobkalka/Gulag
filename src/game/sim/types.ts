@@ -35,6 +35,11 @@ export interface PlayerInput {
   slot: number;
   /** Fractional host tick the client was rendering remote players at (lag compensation). */
   viewTick: number;
+  /**
+   * Life counter (0..254) the input was produced for. Aim from inputs made before the sender
+   * saw a respawn is ignored so the spawn orientation sticks. Omitted = always apply (bots).
+   */
+  life?: number;
 }
 
 export function emptyInput(seq = 0, yaw = 0, pitch = 0, slot = 0): PlayerInput {
@@ -122,6 +127,8 @@ export interface PlayerState {
   deadT: number;
   /** Who killed this player (for the kill cam / spectate). */
   killedBy: number;
+  /** Incremented on every spawn (wraps at 255). */
+  life: number;
 }
 
 export type RoundPhase = 'warmup' | 'countdown' | 'live' | 'overtime' | 'roundEnd' | 'matchEnd';
@@ -163,11 +170,13 @@ export interface ShotTrace {
   surface: Surface | 'flesh' | 'none';
   hitPlayer: number;
   pellet: number;
+  /** Shooter's shot number (matches the 'fire' event). */
+  shot: number;
 }
 
 export type GameEvent =
-  | { type: 'shot'; trace: ShotTrace }
-  | { type: 'fire'; shooter: number; weapon: string }
+  | { type: 'shot'; trace: ShotTrace; /** Client only: the tracer was already drawn by prediction. */ impactOnly?: boolean }
+  | { type: 'fire'; shooter: number; weapon: string; /** shooter's shot number */ n: number }
   | { type: 'damage'; attacker: number; victim: number; amount: number; hitbox: Hitbox; x: number; y: number; z: number; weapon: string; killed: boolean }
   | { type: 'kill'; killer: number; victim: number; weapon: string; headshot: boolean; assister: number }
   | { type: 'reload'; player: number; weapon: string; duration: number; kind: number }

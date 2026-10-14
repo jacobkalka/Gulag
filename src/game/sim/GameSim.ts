@@ -17,7 +17,7 @@ export interface SimPlayerConfig {
   loadout?: Loadout;
 }
 
-const MAX_RANGE = 160;
+export const MAX_RANGE = 160;
 const LAG_COMP_MAX_TICKS = Math.round(0.25 * TICK_RATE);
 const MELEE_DAMAGE = 60;
 const MELEE_BACKSTAB = 120;
@@ -36,7 +36,7 @@ export function makePlayer(cfg: SimPlayerConfig): PlayerState {
     fireCd: 0, burstLeft: 0, reloadT: 0, reloadTotal: 0, reloadKind: 0, swapT: 0, meleeT: 0, meleeHitDone: true,
     bloom: 0, shotCount: 0, recoilIdx: 0, lastShotT: -10, prevButtons: 0, spawnProt: 0, sinceHurt: 99,
     lethals: 1, tacticals: 1, flash: 0, stats: emptyStats(), damageFrom: {}, lastInputSeq: 0, loadout: { ...lo },
-    deadT: 0, killedBy: -1,
+    deadT: 0, killedBy: -1, life: 0,
   };
 }
 
@@ -195,6 +195,7 @@ export class GameSim {
     p.deadT = 0;
     p.killedBy = -1;
     p.spawnProt = this.rules.spawnProtection + this.rules.countdown;
+    p.life = (p.life + 1) % 255; // 255 is reserved on the wire for "any life"
     this.giveWeapons(p);
     this.history.get(p.id)?.clear();
     this.events.push({ type: 'spawn', player: p.id });
@@ -437,7 +438,7 @@ export class GameSim {
       const ez = oz + dz * maxT;
       const trace: ShotTrace = {
         shooter: p.id, weapon: w.id, ox, oy, oz, ex, ey, ez,
-        nx: 0, ny: 0, nz: 0, surface: 'none', hitPlayer: -1, pellet: k,
+        nx: 0, ny: 0, nz: 0, surface: 'none', hitPlayer: -1, pellet: k, shot: p.shotCount,
       };
       if (victim) {
         trace.surface = 'flesh';

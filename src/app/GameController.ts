@@ -15,6 +15,7 @@ import { bakeReflectionProbe } from '@/game/view/ReflectionProbe';
 import type { PlaylistId } from '@/data/playlists';
 import type { Loadout } from '@/data/progression';
 import type { BotDifficulty } from '@/game/bots/BotBrain';
+import { RoomController } from './rooms';
 
 // Owns the renderer, procedural assets, input and the frame loop. Screens (Preact) call
 // into this to start/leave matches; it reports back through callbacks.
@@ -37,6 +38,8 @@ export class GameController {
   onMatchEnd: ((s: MatchSummary) => void) | null = null;
   onPauseChange: ((paused: boolean) => void) | null = null;
   paused = false;
+  readonly rooms: RoomController;
+  private bgWorker: Worker | null = null;
 
   constructor(readonly canvas: HTMLCanvasElement, readonly uiRoot: HTMLElement) {
     const st = settings.value;
@@ -65,6 +68,9 @@ export class GameController {
       if (this.match && !this.paused && !this.input.locked) this.input.requestLock();
     });
     this.renderer.onContextRestored = () => location.reload();
+    // ?norender=1: simulate and network without drawing (automated multiplayer tests)
+    if (new URLSearchParams(location.search).get('norender') === '1') this.renderer.enabled = false;
+    this.rooms = new RoomController(this);
   }
 
   async load(onProgress: (f: number, label: string) => void): Promise<void> {
@@ -203,10 +209,12 @@ export class GameController {
   private startLoop(): void {
     if (this.running) return;
     this.running = true;
+    this.startBackgroundTicker();
     const loop = () => {
       const now = performance.now();
       const dt = Math.min(0.1, (now - this.last) / 1000);
       this.last = now;
+      this.rooms.update();
       if (this.match) this.match.frame(dt);
       else if (this.menuScene && this.menuCam && this.menuMap) {
         this.menuT += dt;
@@ -220,9 +228,33 @@ export class GameController {
     requestAnimationFrame(loop);
   }
 
+  /**
+   * Browsers pause requestAnimationFrame in hidden tabs. A host that alt-tabs must keep the
+   * match running for everyone, so a worker timer (not throttled like main-thread timers)
+   * drives simulation-only ticks whenever frames stop arriving.
+   */
+  private startBackgroundTicker(): void {
+    if (this.bgWorker || typeof Worker === 'undefined') return;
+    const src = 'let t;onmessage=(e)=>{clearInterval(t);if(e.data>0)t=setInterval(()=>postMessage(0),e.data)}';
+    try {
+      this.bgWorker = new Worker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })));
+      this.bgWorker.onmessage = () => {
+        const now = performance.now();
+        if (now - this.last < 120) return; // frames are flowing normally
+        const dt = Math.min(0.25, (now - this.last) / 1000);
+        this.last = now;
+        this.rooms.update();
+        this.match?.backgroundTick(dt);
+      };
+      this.bgWorker.postMessage(20);
+    } catch {
+      this.bgWorker = null;
+    }
+  }
+
   /** Test hook: exposes internals for automated tests. */
   debug() {
-    return { session: this.session, match: this.match, input: this.input };
+    return { session: this.session, match: this.match, input: this.input, rooms: this.rooms };
   }
 
   /** Test hook: fast-forward the current match (see MatchView.simulate). */

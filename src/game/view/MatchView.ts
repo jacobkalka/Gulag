@@ -100,6 +100,7 @@ export class MatchView {
   private flashSound = 0;
   paused = false;
   private disposed = false;
+  private aimLife = -1;
 
   constructor(private o: MatchViewOptions) {
     const q = o.renderer.options.quality;
@@ -168,8 +169,18 @@ export class MatchView {
       buttons,
       slot: slot >= 0 ? slot : lp ? lp.slot : 0,
       viewTick: s.viewTick(),
+      life: lp ? lp.life : 0,
     };
   };
+
+  /** On a new life (respawn), adopt the spawn orientation the simulation chose. */
+  private syncSpawnAim(local: PlayerState | undefined): void {
+    if (!local || local.life === this.aimLife) return;
+    this.aimLife = local.life;
+    this.o.input.yaw = local.yaw;
+    this.o.input.pitch = local.pitch;
+    this.kickPitch = this.kickYaw = this.debtPitch = 0;
+  }
 
   frame(dt: number): void {
     if (this.disposed) return;
@@ -180,6 +191,7 @@ export class MatchView {
     const events = s.update(dt, this.sampleInput);
     for (const e of events) this.handleEvent(e);
     const local = this.localPlayer();
+    this.syncSpawnAim(local);
 
     // ---- recoil recovery (view returns partway after you stop firing)
     if (local) {
@@ -218,6 +230,21 @@ export class MatchView {
       this.fpsT = 0;
       this.fpsN = 0;
     }
+    if (this.ended) {
+      this.endTimer -= dt;
+      if (this.endTimer <= 0 && this.endTimer > -100) {
+        this.endTimer = -1000;
+        this.o.onMatchEnd(this.summary());
+      }
+    }
+  }
+
+  /** Keeps the session running while the tab is hidden (no rendering, rAF is paused). */
+  backgroundTick(dt: number): void {
+    if (this.disposed) return;
+    this.time += dt;
+    const events = this.o.session.update(dt, this.sampleInput);
+    for (const e of events) this.handleEvent(e);
     if (this.ended) {
       this.endTimer -= dt;
       if (this.endTimer <= 0 && this.endTimer > -100) {
@@ -271,6 +298,7 @@ export class MatchView {
         alive: p.alive,
         local: p.id === s.localId,
         bot: p.bot,
+        ping: p.bot || !s.pingOf ? undefined : s.pingOf(p.id),
       }));
   }
 
@@ -334,8 +362,7 @@ export class MatchView {
           }
         }
         const w = getWeapon(t.weapon);
-        const shotNo = s.players.find((p) => p.id === t.shooter)?.shotCount ?? 0;
-        if (t.pellet === 0 && (shotNo % w.tracerEvery === 0 || !isLocal)) this.effects.tracer(ox, oy, oz, t.ex, t.ey, t.ez, w.class === 'sniper' ? 0.012 : 0.007);
+        if (!e.impactOnly && t.pellet === 0 && (t.shot % w.tracerEvery === 0 || !isLocal)) this.effects.tracer(ox, oy, oz, t.ex, t.ey, t.ez, w.class === 'sniper' ? 0.012 : 0.007);
         if (t.surface !== 'none') {
           this.effects.impact(t.ex, t.ey, t.ez, t.nx, t.ny, t.nz, t.surface, this.camera.position, t.surface !== 'flesh');
           if (t.pellet % 3 === 0) {
@@ -345,7 +372,7 @@ export class MatchView {
           }
         }
         // near-miss whiz for the local player
-        if (!isLocal && local && local.alive && t.hitPlayer !== localId) {
+        if (!isLocal && !e.impactOnly && local && local.alive && t.hitPlayer !== localId) {
           const d = segPointDist(t.ox, t.oy, t.oz, t.ex, t.ey, t.ez, local.x, local.y + 1.5, local.z);
           if (d < 1.2) audio.play('whiz', { volume: 0.5 });
         }
@@ -448,10 +475,6 @@ export class MatchView {
         this.vm.scene.visible = true;
         this.debtPitch = 0;
         this.lastCountdown = -1;
-        if (local) {
-          this.o.input.yaw = local.yaw;
-          this.o.input.pitch = 0;
-        }
         this.o.input.resetToggles();
         break;
       case 'roundLive':
