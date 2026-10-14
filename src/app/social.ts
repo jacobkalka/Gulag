@@ -35,6 +35,9 @@ export interface PartyMember {
   name: string;
   seat: string;
   presence: PresenceState;
+  /** Equipped primary (from their profile) for the lobby lineup. */
+  primary?: string;
+  level?: number;
 }
 export interface PartyView {
   id: string;

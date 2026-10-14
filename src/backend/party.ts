@@ -16,6 +16,8 @@ import {
 import type { PlaylistId } from '@/data/playlists';
 import { party, partyChat, type PartyView, type PresenceState } from '@/app/social';
 import { profile, pushToast, selectedPlaylist } from '@/app/state';
+import { doc, getDoc } from 'firebase/firestore';
+import { levelForXp } from '@/data/progression';
 import type { Fb } from './firebase';
 
 // Parties live in the Realtime Database (ephemeral, presence-aware):
@@ -44,6 +46,7 @@ export class PartyService {
   private unsubInvites: Unsubscribe | null = null;
   private memberPresence = new Map<string, Unsubscribe>();
   private presence = new Map<string, PresenceState>();
+  private memberInfo = new Map<string, { primary: string; level: number }>();
   private lastRoom = '';
   private leaving = false;
   private doc: PartyDoc | null = null;
@@ -230,6 +233,16 @@ export class PartyService {
       }
     }
     for (const uid of uids) {
+      if (!this.memberInfo.has(uid)) {
+        this.memberInfo.set(uid, { primary: 'halberd', level: 1 });
+        void getDoc(doc(this.fb.db, 'users', uid))
+          .then((d) => {
+            const x = d.data();
+            if (x) this.memberInfo.set(uid, { primary: x.loadout?.primary ?? 'halberd', level: levelForXp(x.xp ?? 0).level });
+            this.publish();
+          })
+          .catch(() => {});
+      }
       if (this.memberPresence.has(uid)) continue;
       this.memberPresence.set(
         uid,
@@ -254,7 +267,14 @@ export class PartyService {
       playlist: d.playlist,
       room: d.room,
       members: Object.entries(d.members ?? {})
-        .map(([uid, m]) => ({ uid, name: m.name, seat: m.seat, presence: this.presence.get(uid) ?? 'online' }))
+        .map(([uid, m]) => ({
+          uid,
+          name: m.name,
+          seat: m.seat,
+          presence: this.presence.get(uid) ?? 'online',
+          primary: this.memberInfo.get(uid)?.primary,
+          level: this.memberInfo.get(uid)?.level,
+        }))
         .sort((a, b) => a.seat.localeCompare(b.seat)),
     };
     party.value = view;

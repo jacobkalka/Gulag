@@ -17,6 +17,7 @@ import type { Loadout } from '@/data/progression';
 import type { BotDifficulty } from '@/game/bots/BotBrain';
 import { RoomController } from './rooms';
 import { buildWeapon, type WeaponModel } from '@/assets/models/weapons';
+import { buildCharacter, poseWithWeapon, type Rig } from '@/assets/models/character';
 
 // Owns the renderer, procedural assets, input and the frame loop. Screens (Preact) call
 // into this to start/leave matches; it reports back through callbacks.
@@ -47,6 +48,8 @@ export class GameController {
     end: (session: MatchSession, summary: MatchSummary, meta: MatchMeta) => void;
   }[] = [];
   private matchMeta: MatchMeta = {};
+  /** Lobby lineup: the player's operator (and party members) holding their primaries. */
+  private stage: { group: THREE.Group; ops: Operator[]; on: boolean; blend: number } | null = null;
   /** Loadout screen turntable (lights always exist so toggling never recompiles shaders). */
   private showcase: { group: THREE.Group; key: THREE.SpotLight; rim: THREE.PointLight; fill: THREE.PointLight; model: WeaponModel | null; id: string | null; t: number; blend: number } | null = null;
 
@@ -158,6 +161,100 @@ export class GameController {
     fill.position.set(0.6, 0.9, 1.2);
     scene.add(key, rim, fill);
     this.showcase = { group, key, rim, fill, model: null, id: null, t: 0, blend: 0 };
+    const stageGroup = new THREE.Group();
+    stageGroup.position.set(0, 0, 0.4);
+    scene.add(stageGroup);
+    this.stage = { group: stageGroup, ops: [], on: false, blend: 0 };
+  }
+
+  /**
+   * Lobby lineup. Index 0 is the local player (center); others stand to the sides. Pass an
+   * empty list (or setOperatorsVisible(false)) to show the plain backdrop.
+   */
+  setOperators(list: { key: string; weapon: string }[]): void {
+    const st = this.stage;
+    if (!st || !this.assets) return;
+    const keep = new Set(list.map((o) => o.key));
+    for (const op of [...st.ops]) {
+      if (!keep.has(op.key)) {
+        st.group.remove(op.rig.root);
+        st.ops.splice(st.ops.indexOf(op), 1);
+      }
+    }
+    list.slice(0, 4).forEach((o, i) => {
+      let op = st.ops.find((x) => x.key === o.key);
+      if (!op) {
+        const rig = buildCharacter(this.assets.materials, 0);
+        const mount = new THREE.Group();
+        rig.chest.add(mount);
+        st.group.add(rig.root);
+        op = { key: o.key, rig, mount, weapon: null, weaponId: '', phase: Math.random() * 6 };
+        st.ops.push(op);
+      }
+      if (op.weaponId !== o.weapon) {
+        if (op.weapon) op.mount.remove(op.weapon.root);
+        op.weapon = buildWeapon(this.assets.materials, o.weapon);
+        op.weaponId = o.weapon;
+      }
+      // you in the middle, then left, right, far left (the right side of the screen holds the UI)
+      const slot = [0, -1, 1, -2][i] ?? 0;
+      op.rig.root.position.set(slot * 0.95, 0, -Math.abs(slot) * 0.35);
+      // rigs face -Z: turn around to face the camera, angled slightly toward it (+X)
+      op.rig.root.rotation.y = Math.PI + 0.28 - slot * 0.12;
+      op.index = i;
+    });
+  }
+
+  setOperatorsVisible(on: boolean): void {
+    if (this.stage) this.stage.on = on;
+  }
+
+  /** Screen positions above each operator's head (lobby name tags). */
+  operatorTags(): { key: string; x: number; y: number }[] {
+    const st = this.stage;
+    const cam = this.menuCam;
+    if (!st || !cam || st.blend < 0.6 || this.inMatch) return [];
+    const out: { key: string; x: number; y: number }[] = [];
+    const v = new THREE.Vector3();
+    for (const op of st.ops) {
+      op.rig.head.getWorldPosition(v);
+      v.y += 0.32;
+      v.project(cam);
+      if (v.z > 1) continue;
+      out.push({ key: op.key, x: (v.x * 0.5 + 0.5) * window.innerWidth, y: (-v.y * 0.5 + 0.5) * window.innerHeight });
+    }
+    return out;
+  }
+
+  private updateStage(dt: number, t: number): number {
+    const st = this.stage;
+    if (!st || !this.menuCam) return 0;
+    const on = st.on && st.ops.length > 0 && !this.showcase?.id;
+    st.blend = Math.max(0, Math.min(1, st.blend + (on ? dt : -dt) * 2));
+    st.group.visible = st.blend > 0.01;
+    if (!st.group.visible) return 0;
+    for (const op of st.ops) {
+      const r = op.rig;
+      const b = Math.sin(t * 1.7 + op.phase);
+      // relaxed low-ready stance with a little breathing
+      r.spine.rotation.x = 0.04 + b * 0.012;
+      r.chest.rotation.set(0.02 + b * 0.008, 0.1, 0);
+      r.neck.rotation.set(-0.06, -0.08 + Math.sin(t * 0.4 + op.phase) * 0.12, 0);
+      r.hipL.rotation.set(-0.08, 0, 0.06);
+      r.kneeL.rotation.x = 0.12;
+      r.hipR.rotation.set(0.1, 0, -0.08);
+      r.kneeR.rotation.x = 0.05;
+      // low ready: muzzle down and across the body so the silhouette reads from the front
+      if (op.weapon) poseWithWeapon(r, op.weapon, -0.5, op.mount, 0.75);
+    }
+    const k = st.blend * st.blend * (3 - 2 * st.blend);
+    // frame the lineup on the left half of the screen (UI lives on the right)
+    const camPos = new THREE.Vector3(1.3 + Math.sin(t * 0.07) * 0.08, 1.5, 3.3);
+    this.menuCam.position.lerp(camPos, Math.min(1, k + 0.02));
+    const look = new THREE.Vector3(1.0, 1.15, 0.2);
+    const cur = new THREE.Vector3(0, 1.4, 0).lerp(look, k);
+    this.menuCam.lookAt(cur);
+    return k;
   }
 
   /** Shows a weapon on the menu turntable (loadout screen), or null to return to the lobby view. */
@@ -182,15 +279,16 @@ export class GameController {
     sc.t = 0;
   }
 
-  private updateShowcase(dt: number): boolean {
+  private updateShowcase(dt: number, stageK = 0): boolean {
     const sc = this.showcase;
     if (!sc || !this.menuCam) return false;
     const on = !!sc.id;
     sc.blend = Math.max(0, Math.min(1, sc.blend + (on ? dt : -dt) * 2.5));
     const k = sc.blend * sc.blend * (3 - 2 * sc.blend);
-    sc.key.intensity = 16 * k;
-    sc.rim.intensity = 6 * k;
-    sc.fill.intensity = 1.4 * k;
+    // the same rig lights the lobby lineup (softer) and the loadout turntable
+    sc.key.intensity = 16 * k + 9 * stageK;
+    sc.rim.intensity = 6 * k + 5 * stageK;
+    sc.fill.intensity = 1.4 * k + 1.0 * stageK;
     if (!sc.model) return k > 0.001;
     sc.t += dt;
     const len = sc.model.length || 0.8;
@@ -309,7 +407,8 @@ export class GameController {
       else if (this.menuScene && this.menuCam && this.menuMap) {
         this.menuT += dt;
         this.setMenuCamera(this.menuT);
-        this.updateShowcase(dt);
+        const stageK = this.updateStage(dt, this.menuT);
+        this.updateShowcase(dt, stageK);
         this.menuMap.update(this.menuCam, this.menuT, dt);
         this.renderer.render(dt);
       }
@@ -359,6 +458,16 @@ export class GameController {
       return { seq: ++seq + Math.floor(performance.now()), mx: 0, mz, yaw: this.input.yaw, pitch: this.input.pitch, buttons, slot: p ? p.slot : 0, viewTick: s.viewTick() };
     });
   }
+}
+
+interface Operator {
+  key: string;
+  rig: Rig;
+  mount: THREE.Group;
+  weapon: WeaponModel | null;
+  weaponId: string;
+  phase: number;
+  index?: number;
 }
 
 /** How the local machine relates to a match (set by whoever starts it). */

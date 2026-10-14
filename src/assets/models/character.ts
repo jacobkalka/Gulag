@@ -376,10 +376,10 @@ export function wristTarget(grip: THREE.Vector3, handWorld: THREE.Quaternion, re
  * Attaches a weapon to the character in an aiming pose and solves both arms onto it.
  * `aimPitch` tilts the weapon; the weapon is mounted relative to the chest.
  */
-export function poseWithWeapon(rig: Rig, weapon: WeaponModel, aimPitch: number, mount: THREE.Object3D): void {
+export function poseWithWeapon(rig: Rig, weapon: WeaponModel, aimPitch: number, mount: THREE.Object3D, aimYaw = 0): void {
   // Weapon mount lives under the chest: stock at the right shoulder pocket.
   mount.position.set(0.12, 0.14, -0.24);
-  mount.rotation.set(aimPitch, 0, 0);
+  mount.rotation.set(aimPitch, aimYaw, 0, 'YXZ');
   if (weapon.root.parent !== mount) mount.add(weapon.root);
   weapon.root.position.set(0, 0, 0);
   rig.root.updateMatrixWorld(true);

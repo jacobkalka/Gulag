@@ -118,10 +118,50 @@ export function PlayTab(props: { game: GameController }): JSX.Element {
   );
 }
 
+/** Keeps the 3D lobby lineup in sync (you + party members) and draws their name tags. */
+function Operators(props: { game: GameController; visible: boolean }): JSX.Element {
+  const p = profile.value;
+  const pv = party.value;
+  const me = account.value?.uid ?? 'me';
+  const list = [{ key: me, name: p.username, level: levelForXp(p.xp).level, weapon: p.loadout.primary }];
+  for (const m of pv?.members ?? []) if (m.uid !== me) list.push({ key: m.uid, name: m.name, level: m.level ?? 1, weapon: m.primary ?? 'halberd' });
+  const sig = list.map((o) => `${o.key}:${o.weapon}`).join('|');
+  useEffect(() => props.game.setOperators(list.map((o) => ({ key: o.key, weapon: o.weapon }))), [sig]);
+  useEffect(() => props.game.setOperatorsVisible(props.visible), [props.visible]);
+  useEffect(() => () => props.game.setOperatorsVisible(false), []);
+  const [tags, setTags] = useState<{ key: string; x: number; y: number }[]>([]);
+  useEffect(() => {
+    let raf = 0;
+    const loop = () => {
+      const t = props.game.operatorTags();
+      setTags((prev) => (prev.length === t.length && prev.every((a, i) => Math.abs(a.x - t[i].x) < 0.5 && Math.abs(a.y - t[i].y) < 0.5) ? prev : t));
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+  if (!props.visible) return <></>;
+  return (
+    <div class="op-tags">
+      {tags.map((t) => {
+        const o = list.find((x) => x.key === t.key);
+        if (!o) return null;
+        return (
+          <div class={`op-tag ${o.key === me ? 'me' : ''}`} style={{ left: `${t.x}px`, top: `${t.y}px` }}>
+            <b>{o.name}</b>
+            <span>LV {o.level}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export function Lobby(props: { game: GameController }): JSX.Element {
   const tab = lobbyTab.value;
   return (
     <div class="lobby">
+      <Operators game={props.game} visible={(tab === 'play' && !roomView.value) || tab === 'social'} />
       <TopNav />
       <main class="lobby-main">
         {tab === 'play' && <PlayTab game={props.game} />}
