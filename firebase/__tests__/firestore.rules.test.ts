@@ -24,7 +24,7 @@ const db = (uid: string | null): Firestore => (uid ? env.authenticatedContext(ui
 /** The batched writes the client performs on first sign-in. */
 function createProfile(f: Firestore, uid: string, name: string, code: string) {
   const b = writeBatch(f);
-  b.set(doc(f, 'users', uid), { username: name, usernameLower: name.toLowerCase(), friendCode: code, xp: 0, loadout, stats: zero, createdAt: serverTimestamp(), updatedAt: serverTimestamp(), lastClaim: '' });
+  b.set(doc(f, 'users', uid), { username: name, usernameLower: name.toLowerCase(), friendCode: code, xp: 0, loadout, stats: zero, createdAt: serverTimestamp(), updatedAt: serverTimestamp(), lastClaim: '', lastClaimAt: serverTimestamp() });
   b.set(doc(f, 'usernames', name.toLowerCase()), { uid });
   b.set(doc(f, 'friendCodes', code), { uid });
   return b.commit();
@@ -37,9 +37,9 @@ async function seed(fn: (f: Firestore) => Promise<unknown>) {
   });
 }
 
-async function seedProfile(uid: string, name: string, code: string, xp = 0) {
+async function seedProfile(uid: string, name: string, code: string, xp = 0, lastClaimAgoMs = 60_000) {
   await seed(async (f) => {
-    await setDoc(doc(f, 'users', uid), { username: name, usernameLower: name.toLowerCase(), friendCode: code, xp, loadout, stats: zero, createdAt: Timestamp.now(), updatedAt: Timestamp.now(), lastClaim: '' });
+    await setDoc(doc(f, 'users', uid), { username: name, usernameLower: name.toLowerCase(), friendCode: code, xp, loadout, stats: zero, createdAt: Timestamp.now(), updatedAt: Timestamp.now(), lastClaim: '', lastClaimAt: Timestamp.fromMillis(Date.now() - lastClaimAgoMs) });
     await setDoc(doc(f, 'usernames', name.toLowerCase()), { uid });
     await setDoc(doc(f, 'friendCodes', code), { uid });
   });
@@ -59,6 +59,7 @@ function claim(f: Firestore, uid: string, mid: string, dxp: number, r: ReturnTyp
   b.update(doc(f, 'users', uid), {
     xp: base.xp + dxp,
     lastClaim: mid,
+    lastClaimAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
     stats: {
       kills: s.kills + (r.kills as number), deaths: s.deaths + (r.deaths as number), assists: s.assists + (r.assists as number), damage: s.damage + (r.damage as number),
@@ -87,7 +88,7 @@ describe('profiles', () => {
   it('cannot create a profile with starting XP or for someone else', async () => {
     const f = db('bob');
     const b = writeBatch(f);
-    b.set(doc(f, 'users', 'bob'), { username: 'Bob', usernameLower: 'bob', friendCode: 'XYZ234', xp: 99999, loadout, stats: zero, createdAt: serverTimestamp(), updatedAt: serverTimestamp(), lastClaim: '' });
+    b.set(doc(f, 'users', 'bob'), { username: 'Bob', usernameLower: 'bob', friendCode: 'XYZ234', xp: 99999, loadout, stats: zero, createdAt: serverTimestamp(), updatedAt: serverTimestamp(), lastClaim: '', lastClaimAt: serverTimestamp() });
     b.set(doc(f, 'usernames', 'bob'), { uid: 'bob' });
     b.set(doc(f, 'friendCodes', 'XYZ234'), { uid: 'bob' });
     await assertFails(b.commit());
@@ -128,6 +129,14 @@ describe('XP claims against host-reported match records', () => {
     // second claim of the same match fails
     const after = { xp: RESULT_XP, stats: { ...zero, kills: 3, deaths: 1, assists: 1, damage: 455, headshots: 1, shots: 40, hits: 12, roundsWon: 2, matches: 1, wins: 1 } };
     await assertFails(claim(db('alice'), 'alice', 'm1', RESULT_XP, result(), after));
+    // and a different match right away is rate limited
+    await seedMatch('m9', 'host1', ['host1', 'alice'], { alice: result() });
+    await assertFails(claim(db('alice'), 'alice', 'm9', RESULT_XP, result(), after));
+  });
+  it('claims are rate limited per player', async () => {
+    await seedProfile('alice', 'Alice', 'ABC234', 0, 5_000);
+    await seedMatch('m1', 'host1', ['host1', 'alice'], { alice: result() });
+    await assertFails(claim(db('alice'), 'alice', 'm1', RESULT_XP, result()));
   });
   it('rejects claims above the formula, inflated stats or unfinished matches', async () => {
     await seedProfile('alice', 'Alice', 'ABC234');
@@ -160,7 +169,7 @@ describe('match records', () => {
     await assertFails(setDoc(doc(db('alice'), 'matches', 'x3'), m('alice', { state: 'done' })));
     // finishing immediately is rejected (minimum match duration)
     await assertFails(updateDoc(doc(db('alice'), 'matches', 'x1'), { state: 'done', endedAt: serverTimestamp(), results: { alice: result() } }));
-    await seed((f) => updateDoc(doc(f, 'matches', 'x1'), { startedAt: Timestamp.fromMillis(Date.now() - 60_000) }));
+    await seed((f) => updateDoc(doc(f, 'matches', 'x1'), { startedAt: Timestamp.fromMillis(Date.now() - 20_000) }));
     await assertFails(updateDoc(doc(db('bob'), 'matches', 'x1'), { state: 'done', endedAt: serverTimestamp(), results: { bob: result() } }));
     await assertFails(updateDoc(doc(db('alice'), 'matches', 'x1'), { state: 'done', endedAt: serverTimestamp(), results: { eve: result() } }));
     await assertSucceeds(updateDoc(doc(db('alice'), 'matches', 'x1'), { state: 'done', endedAt: serverTimestamp(), results: { alice: result(), bob: result({ won: false }) } }));

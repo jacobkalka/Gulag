@@ -12,11 +12,16 @@ import type { CoverSpot, NavGrid } from './NavGrid';
 
 export type BotDifficulty = 'recruit' | 'regular' | 'veteran';
 
-const DIFF: Record<BotDifficulty, { reaction: number; aimErr: number; settle: number; turn: number; head: number; comp: number; strafe: number; fov: number }> = {
-  recruit: { reaction: 0.62, aimErr: 7.5, settle: 1.25, turn: 230, head: 0.05, comp: 0.35, strafe: 0.45, fov: 105 },
-  regular: { reaction: 0.4, aimErr: 4.6, settle: 0.8, turn: 360, head: 0.14, comp: 0.62, strafe: 0.75, fov: 118 },
-  veteran: { reaction: 0.25, aimErr: 2.8, settle: 0.5, turn: 560, head: 0.28, comp: 0.85, strafe: 1.0, fov: 130 },
+const DIFF: Record<BotDifficulty, { reaction: number; aimErr: number; settle: number; turn: number; head: number; comp: number; strafe: number; fov: number; nade: number }> = {
+  recruit: { reaction: 0.62, aimErr: 7.5, settle: 1.25, turn: 230, head: 0.05, comp: 0.35, strafe: 0.45, fov: 105, nade: 0.2 },
+  regular: { reaction: 0.4, aimErr: 4.6, settle: 0.8, turn: 360, head: 0.14, comp: 0.62, strafe: 0.75, fov: 118, nade: 0.5 },
+  veteran: { reaction: 0.25, aimErr: 2.8, settle: 0.5, turn: 560, head: 0.28, comp: 0.85, strafe: 1.0, fov: 130, nade: 0.85 },
 };
+
+/** Frag launch model mirrored from GameSim.tryThrow (speed, upward boost, gravity). */
+const FRAG_SPEED = 15;
+const FRAG_UP = 3.2;
+const GRAVITY = 20;
 
 type State = 'idle' | 'roam' | 'engage' | 'cover' | 'peek' | 'hunt' | 'objective';
 
@@ -70,12 +75,58 @@ export class BotBrain {
   private lane: number;
   private poiIdx = -1;
   private lookAround = 0;
+  /** Seconds until the bot will consider another grenade. */
+  private nadeCd: number;
+  private nadePlan: { yaw: number; pitch: number; t: number } | null = null;
+  /** Grenades thrown (diagnostics/tests). */
+  thrown = 0;
 
   constructor(readonly id: number, difficulty: BotDifficulty = 'regular', seed = 1) {
     this.diff = DIFF[difficulty];
     this.rng = new Rng(seed * 977 + id * 131);
     this.perceiveT = (id % 6) * 0.017;
     this.lane = id;
+    this.nadeCd = 6 + this.rng.next() * 6;
+  }
+
+  /**
+   * Solves a launch pitch that lands a frag near the target point with a clear arc (sampled
+   * against level geometry), preferring flat throws. Null when there is no good throw.
+   */
+  private planThrow(sim: GameSim, me: PlayerState, tx: number, ty: number, tz: number): { yaw: number; pitch: number } | null {
+    const ox = me.x;
+    const oy = me.y + eyeHeight(me) - 0.15;
+    const oz = me.z;
+    const dx = tx - ox;
+    const dz = tz - oz;
+    const d = Math.hypot(dx, dz);
+    if (d < 6 || d > 22) return null;
+    const ux = dx / d;
+    const uz = dz / d;
+    const dh = ty + 0.3 - oy;
+    for (let pitch = -0.3; pitch <= 1.15; pitch += 0.025) {
+      const vh = FRAG_SPEED * Math.cos(pitch);
+      const vy = FRAG_SPEED * Math.sin(pitch) + FRAG_UP;
+      const T = d / vh;
+      const y = vy * T - 0.5 * GRAVITY * T * T;
+      if (Math.abs(y - dh) > 0.7) continue;
+      let px = ox;
+      let py = oy;
+      let pz = oz;
+      let clear = true;
+      for (let i = 1; i <= 12 && clear; i++) {
+        const t = ((T * i) / 12) * 0.94;
+        const nx = ox + ux * vh * t;
+        const ny = oy + vy * t - 0.5 * GRAVITY * t * t;
+        const nz = oz + uz * vh * t;
+        clear = sim.world.lineOfSight(px, py, pz, nx, ny, nz);
+        px = nx;
+        py = ny;
+        pz = nz;
+      }
+      if (clear) return { yaw: Math.atan2(-dx, -dz), pitch };
+    }
+    return null;
   }
 
   /** Debug snapshot of the brain's state. */
@@ -234,6 +285,20 @@ export class BotBrain {
         this.errYaw = (this.rng.next() * 2 - 1) * this.diff.aimErr * DEG;
         this.errPitch = (this.rng.next() * 2 - 1) * this.diff.aimErr * 0.6 * DEG;
         this.aimHead = this.rng.chance(this.diff.head);
+      }
+    }
+
+    // ---- grenades: flush out an enemy who just broke line of sight behind cover
+    this.nadeCd -= DT;
+    if (!this.nadePlan && this.nadeCd <= 0 && me.lethals > 0 && me.loadout.lethal === 'frag' && (this.state === 'cover' || this.state === 'hunt' || this.state === 'peek')) {
+      this.nadeCd = 1.2;
+      const lk = [...this.mem.values()].sort((a, b) => b.lastSeen - a.lastSeen)[0];
+      if (lk && !lk.visible && now - lk.lastSeen < 4 && this.rng.chance(this.diff.nade)) {
+        const plan = this.planThrow(sim, me, lk.x, lk.y, lk.z);
+        if (plan) {
+          this.nadePlan = { ...plan, t: 0 };
+          this.nadeCd = 12 + this.rng.next() * 10;
+        }
       }
     }
 
@@ -422,6 +487,23 @@ export class BotBrain {
       if (mag < w.magSize && !reloading && me.weapons[me.slot].reserve > 0 && mag < w.magSize * 0.5) inp.buttons |= BTN.RELOAD;
     }
 
+    // a planned throw overrides aim: line it up, then pull the pin
+    let throwNow = false;
+    if (this.nadePlan) {
+      const pl = this.nadePlan;
+      pl.t += DT;
+      lookYaw = pl.yaw;
+      lookPitch = pl.pitch;
+      fire = false;
+      ads = false;
+      sprint = false;
+      if (pl.t > 0.25 && Math.abs(angleDiff(this.yaw, pl.yaw)) < 0.06 && Math.abs(this.pitch - pl.pitch) < 0.06) {
+        throwNow = true;
+        this.nadePlan = null;
+        this.thrown++;
+      } else if (pl.t > 1.5) this.nadePlan = null;
+    }
+
     // ---- turn toward desired view with a capped rate (and recoil)
     const maxTurn = this.diff.turn * DEG * DT;
     const dyaw = clamp(angleDiff(this.yaw, lookYaw), -maxTurn, maxTurn);
@@ -486,6 +568,7 @@ export class BotBrain {
     inp.yaw = this.yaw;
     inp.pitch = this.pitch;
     if (fire) inp.buttons |= BTN.FIRE;
+    if (throwNow) inp.buttons |= BTN.LETHAL;
     if (ads) inp.buttons |= BTN.ADS;
     if (crouch) inp.buttons |= BTN.CROUCH;
     if (sprint && inp.mz > 0.7 && !fire && !ads) inp.buttons |= BTN.SPRINT;

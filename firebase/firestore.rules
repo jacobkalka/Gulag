@@ -13,8 +13,9 @@ rules_version = '2';
 // Trust model: there is no game server. The host's browser simulates the match and reports
 // results here. A player can only claim XP that the formula below allows for the result the
 // host reported for them, at most once per match, and loadouts must be unlocked by XP.
-// A cheating *host* can still fabricate a record; the per-match cap and the minimum match
-// duration bound how fast that can farm XP (see README "Known limitations").
+// A cheating *host* can still fabricate a record; the per-match cap, the minimum match
+// duration and the per-player claim rate limit bound how fast that can farm XP
+// (see README "Known limitations").
 
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -89,7 +90,7 @@ service cloud.firestore {
     }
 
     function progressUnchanged() {
-      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['xp', 'stats', 'lastClaim']);
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['xp', 'stats', 'lastClaim', 'lastClaimAt']);
     }
 
     function validClaim(uid) {
@@ -100,6 +101,8 @@ service cloud.firestore {
       let r = m.results[uid];
       let dxp = d.xp - o.xp;
       return mid is string && mid != o.lastClaim
+        && request.time > o.lastClaimAt + duration.value(20, 's')
+        && d.lastClaimAt == request.time
         && m.state == 'done'
         && uid in m.results
         && plausible(r)
@@ -135,7 +138,7 @@ service cloud.firestore {
     match /users/{uid} {
       allow read: if signedIn();
       allow create: if isUser(uid)
-        && request.resource.data.keys().hasOnly(['username', 'usernameLower', 'friendCode', 'xp', 'loadout', 'stats', 'createdAt', 'updatedAt', 'lastClaim'])
+        && request.resource.data.keys().hasOnly(['username', 'usernameLower', 'friendCode', 'xp', 'loadout', 'stats', 'createdAt', 'updatedAt', 'lastClaim', 'lastClaimAt'])
         && nameClaimed(uid)
         && getAfter(/databases/$(database)/documents/friendCodes/$(request.resource.data.friendCode)).data.uid == uid
         && request.resource.data.xp == 0
@@ -143,9 +146,10 @@ service cloud.firestore {
         && validLoadout(request.resource.data.loadout, 0)
         && request.resource.data.createdAt == request.time
         && request.resource.data.updatedAt == request.time
-        && request.resource.data.lastClaim == '';
+        && request.resource.data.lastClaim == ''
+        && request.resource.data.lastClaimAt == request.time;
       allow update: if isUser(uid)
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['username', 'usernameLower', 'xp', 'loadout', 'stats', 'updatedAt', 'lastClaim'])
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['username', 'usernameLower', 'xp', 'loadout', 'stats', 'updatedAt', 'lastClaim', 'lastClaimAt'])
         && request.resource.data.updatedAt == request.time
         && (nameUnchanged() || nameClaimed(uid))
         && validLoadout(request.resource.data.loadout, request.resource.data.xp)
@@ -236,7 +240,7 @@ service cloud.firestore {
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['state', 'endedAt', 'results'])
         && request.resource.data.state == 'done'
         && request.resource.data.endedAt == request.time
-        && request.time > resource.data.startedAt + duration.value(30, 's')
+        && request.time > resource.data.startedAt + duration.value(15, 's')
         && request.resource.data.results.keys().hasOnly(resource.data.humans);
       allow delete: if false;
     }

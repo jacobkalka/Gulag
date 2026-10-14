@@ -10,6 +10,7 @@ const map = buildSublevel9();
 
 describe('bot soak', () => {
   const runs: [PlaylistId, number][] = [['1v1', 1], ['1v1', 2], ['2v2', 3], ['2v2', 4], ['3v3', 5], ['3v3', 6], ['4v4', 7]];
+  const nades = { thrown: 0, fragKills: 0, selfKills: 0 };
   for (const [pl, seed] of runs) {
     it(`${pl} seed ${seed}`, () => {
       const rules = PLAYLISTS[pl].rules;
@@ -28,7 +29,16 @@ describe('bot soak', () => {
       for (; t < 60 * 60 * 10 && sim.round.phase !== 'matchEnd'; t++) {
         sim.step((p) => brains.get(p.id)!.think(sim, nav, p));
         for (const p of sim.players) brains.get(p.id)!.observe(sim.events, sim, p);
-        for (const e of sim.events) if (e.type === 'kill') kills++;
+        for (const e of sim.events) {
+          if (e.type === 'kill') {
+            kills++;
+            if (e.weapon === 'frag') {
+              nades.fragKills++;
+              if (e.killer === e.victim) nades.selfKills++;
+            }
+          }
+          if (e.type === 'grenade') nades.thrown++;
+        }
         if (sim.round.phase !== 'live' && sim.round.phase !== 'overtime') {
           still.clear();
           continue;
@@ -49,4 +59,9 @@ describe('bot soak', () => {
       expect(stuckReports.length).toBeLessThanOrEqual(1);
     });
   }
+  it('bots throw grenades and rarely blow themselves up', () => {
+    console.log(`grenades thrown ${nades.thrown}, frag kills ${nades.fragKills}, self kills ${nades.selfKills}`);
+    expect(nades.thrown).toBeGreaterThan(3);
+    expect(nades.selfKills).toBeLessThanOrEqual(Math.max(1, nades.thrown * 0.1));
+  });
 });

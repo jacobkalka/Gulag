@@ -133,6 +133,7 @@ export async function claimMatchXp(fb: Fb, matchId: string): Promise<MatchAward 
     tx.update(userRef, {
       xp: d.xp + total,
       lastClaim: matchId,
+      lastClaimAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
       stats: {
         kills: s.kills + r.kills,

@@ -118,6 +118,7 @@ export class AccountService {
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
         lastClaim: '',
+        lastClaimAt: serverTimestamp(),
       });
       b.set(doc(db, 'usernames', name.toLowerCase()), { uid: u.uid });
       b.set(doc(db, 'friendCodes', code), { uid: u.uid });
