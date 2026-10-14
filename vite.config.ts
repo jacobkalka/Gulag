@@ -3,8 +3,11 @@ import { fileURLToPath, URL } from 'node:url';
 
 // Relative base so the static build works under any GitHub Pages project path
 // (https://<user>.github.io/<repo>/) as well as at a domain root.
+const build = new Date().toISOString().slice(0, 16).replace('T', ' ');
+
 export default defineConfig({
   base: './',
+  define: { __BUILD__: JSON.stringify(process.env.GITHUB_SHA ? process.env.GITHUB_SHA.slice(0, 7) : build) },
   resolve: {
     alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
   },

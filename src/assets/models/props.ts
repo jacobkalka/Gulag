@@ -2,34 +2,11 @@ import * as THREE from 'three';
 import type { MaterialLibrary } from '../materials';
 import { box, capsule, cyl, cylX, cylZ, lathe, merge, rbox, rock, sphere, torus, xf, type Geo } from '../geometry/toolkit';
 import { Rng } from '@/shared/rng';
-import type { Surface, V3 } from '@/game/world/mapTypes';
+import { PROP_COLLIDERS, type PropCollider } from '@/game/world/propColliders';
 
 // Map props: visual builders + collision proxies (in prop-local space, origin on the floor).
 
-export interface PropAABB {
-  kind: 'box';
-  min: V3;
-  max: V3;
-  surface: Surface;
-}
-export interface PropCyl {
-  kind: 'cyl';
-  x: number;
-  z: number;
-  r: number;
-  y0: number;
-  y1: number;
-  surface: Surface;
-}
-export interface PropRamp {
-  kind: 'ramp';
-  min: V3;
-  max: V3;
-  axis: 'x' | 'z';
-  dir: 1 | -1;
-  surface: Surface;
-}
-export type PropCollider = PropAABB | PropCyl | PropRamp;
+export type { PropCollider } from '@/game/world/propColliders';
 
 class Sink {
   map = new Map<THREE.Material, Geo[]>();
@@ -55,7 +32,6 @@ class Sink {
   }
 }
 
-const bx = (min: V3, max: V3, surface: Surface = 'concrete'): PropAABB => ({ kind: 'box', min, max, surface });
 
 export interface PropDef {
   build(lib: MaterialLibrary, v: number): THREE.Group;
@@ -111,9 +87,7 @@ const rubble: PropDef = {
     rubbleChunks(s, rng, 0, 0, 0.75, 0.6, 0.55, 42, true);
     return s.build('rubble');
   },
-  colliders() {
-    return [bx([-0.7, 0, -0.55], [0.7, 0.28, 0.55]), bx([-0.4, 0, -0.32], [0.4, 0.5, 0.32])];
-  },
+  colliders: (v) => PROP_COLLIDERS.rubble(v),
 };
 
 const slab: PropDef = {
@@ -159,13 +133,7 @@ const slab: PropDef = {
     }
     return s.build('slab');
   },
-  colliders() {
-    // Walkable incline (rises toward +x) with a solid top end.
-    return [
-      { kind: 'ramp', min: [-1.05, 0, -0.7], max: [0.95, 1.0, 0.7], axis: 'x', dir: 1, surface: 'concrete' },
-      bx([0.95, 0, -0.7], [1.25, 1.0, 0.7]),
-    ];
-  },
+  colliders: (v) => PROP_COLLIDERS.slab(v),
 };
 
 /** Broken concrete teeth + bent rebar hanging along one edge of a ceiling hole (local X axis, hole toward +Z). */
@@ -193,7 +161,7 @@ const holeEdge: PropDef = {
     s.add('black', cable);
     return s.build('holeEdge');
   },
-  colliders: () => [],
+  colliders: (v) => PROP_COLLIDERS.holeEdge(v),
 };
 
 // -------------------------------------------------------------------------- industrial
@@ -221,7 +189,7 @@ const crate: PropDef = {
     s.add(v % 3 === 2 ? 'paintGreen' : 'wood', ...frame);
     return s.build('crate');
   },
-  colliders: () => [bx([-0.5, 0, -0.5], [0.5, 1.0, 0.5], 'wood')],
+  colliders: (v) => PROP_COLLIDERS.crate(v),
 };
 
 const crateSmall: PropDef = {
@@ -234,7 +202,7 @@ const crateSmall: PropDef = {
     s.add('darkMetal', box(0.08, 0.05, 0.03, { p: [0.18, 0.3, -0.215] }));
     return s.build('crateSmall');
   },
-  colliders: () => [bx([-0.31, 0, -0.21], [0.31, 0.44, 0.21], 'metal')],
+  colliders: (v) => PROP_COLLIDERS.crateSmall(v),
 };
 
 const barrel: PropDef = {
@@ -249,7 +217,7 @@ const barrel: PropDef = {
     s.add('darkMetal', cyl(0.03, 0.03, 0.02, 10, { p: [0.15, 0.885, 0.05] }));
     return s.build('barrel');
   },
-  colliders: () => [{ kind: 'cyl', x: 0, z: 0, r: 0.3, y0: 0, y1: 0.89, surface: 'metal' }],
+  colliders: (v) => PROP_COLLIDERS.barrel(v),
 };
 
 const valve: PropDef = {
@@ -276,7 +244,7 @@ const valve: PropDef = {
     s.add('ceramic', cylZ(0.06, 0.005, 16, { p: [0.3, 1.32, -0.082] }));
     return s.build('valve');
   },
-  colliders: () => [bx([-0.5, 0, -0.35], [0.5, 1.3, 0.35], 'metal')],
+  colliders: (v) => PROP_COLLIDERS.valve(v),
 };
 
 const pipes: PropDef = {
@@ -295,7 +263,7 @@ const pipes: PropDef = {
     }
     return s.build('pipes');
   },
-  colliders: () => [bx([-1.5, 0, -0.38], [1.5, 0.7, 0.38], 'metal')],
+  colliders: (v) => PROP_COLLIDERS.pipes(v),
 };
 
 const boiler: PropDef = {
@@ -342,10 +310,7 @@ const boiler: PropDef = {
     s.add('darkMetal', cyl(0.02, 0.02, 3.4, 6, { p: [R + 0.08, 2.1, -0.18] }));
     return s.build('boiler');
   },
-  colliders: () => [
-    bx([-1.65, 0, -1.65], [1.65, 0.3, 1.65]),
-    { kind: 'cyl', x: 0, z: 0, r: 1.48, y0: 0, y1: 4.7, surface: 'metal' },
-  ],
+  colliders: (v) => PROP_COLLIDERS.boiler(v),
 };
 
 const pump: PropDef = {
@@ -362,7 +327,7 @@ const pump: PropDef = {
     s.add('darkMetal', box(0.2, 0.4, 0.3, { p: [-0.95, 0.72, 0] }));
     return s.build('pump');
   },
-  colliders: () => [bx([-1.2, 0, -0.6], [1.2, 1.25, 0.6], 'metal'), { kind: 'cyl', x: 0.65, z: 0, r: 0.16, y0: 0, y1: 3.8, surface: 'metal' }],
+  colliders: (v) => PROP_COLLIDERS.pump(v),
 };
 
 // -------------------------------------------------------------------------- showers / cells / rooms
@@ -379,7 +344,7 @@ const showerHead: PropDef = {
     s.add('chrome', torus(0.04, 0.008, 6, 12, Math.PI * 2, { p: [0, -0.45, -0.025] }));
     return s.build('showerHead', false);
   },
-  colliders: () => [],
+  colliders: (v) => PROP_COLLIDERS.showerHead(v),
 };
 
 const drain: PropDef = {
@@ -392,7 +357,7 @@ const drain: PropDef = {
     s.add('darkMetal', torus(0.18, 0.02, 6, 24, Math.PI * 2, { p: [0, 0.014, 0], r: [Math.PI / 2, 0, 0] }));
     return s.build('drain', false);
   },
-  colliders: () => [],
+  colliders: (v) => PROP_COLLIDERS.drain(v),
 };
 
 const bars: PropDef = {
@@ -404,7 +369,7 @@ const bars: PropDef = {
     s.add('darkMetal', box(W, 0.04, 0.04, { p: [0, 0.6, 0] }));
     return s.build('bars');
   },
-  colliders: () => [],
+  colliders: (v) => PROP_COLLIDERS.bars(v),
 };
 
 const desk: PropDef = {
@@ -419,7 +384,7 @@ const desk: PropDef = {
     s.add('lampCool', box(0.32, 0.2, 0.005, { p: [0.2, 0.925, 0.115], r: [-0.15, 0, 0] }));
     return s.build('desk');
   },
-  colliders: () => [bx([-0.75, 0, -0.35], [0.75, 0.78, 0.35], 'metal')],
+  colliders: (v) => PROP_COLLIDERS.desk(v),
 };
 
 const bunk: PropDef = {
@@ -438,7 +403,7 @@ const bunk: PropDef = {
     for (let i = 0; i < 4; i++) s.add('darkMetal', cylZ(0.015, W, 6, { p: [L / 2, 0.5 + i * 0.25, 0] }));
     return s.build('bunk');
   },
-  colliders: () => [bx([-0.97, 0, -0.42], [0.97, 1.62, 0.42], 'metal')],
+  colliders: (v) => PROP_COLLIDERS.bunk(v),
 };
 
 const bunkTipped: PropDef = {
@@ -455,7 +420,7 @@ const bunkTipped: PropDef = {
     s.add('mattress', rbox(1.8, 0.7, 0.13, 0.04, 2, { p: [0.1, 0.4, -0.12], r: [0.1, 0.05, 0] }));
     return s.build('bunkTipped');
   },
-  colliders: () => [bx([-0.97, 0, -0.42], [0.97, 1.2, 0.42], 'metal')],
+  colliders: (v) => PROP_COLLIDERS.bunkTipped(v),
 };
 
 const mattress: PropDef = {
@@ -465,7 +430,7 @@ const mattress: PropDef = {
     s.add('mattress', rbox(1.85, 0.13, 0.78, 0.05, 2, { p: [0, 0.065, 0] }));
     return s.build('mattress');
   },
-  colliders: () => [],
+  colliders: (v) => PROP_COLLIDERS.mattress(v),
 };
 
 const toilet: PropDef = {
@@ -477,7 +442,7 @@ const toilet: PropDef = {
     s.add('chrome', rbox(0.5, 0.35, 0.18, 0.04, 2, { p: [0, 0.6, 0.24] }));
     return s.build('toilet');
   },
-  colliders: () => [bx([-0.22, 0, -0.25], [0.22, 0.45, 0.33], 'metal')],
+  colliders: (v) => PROP_COLLIDERS.toilet(v),
 };
 
 const bench: PropDef = {
@@ -492,20 +457,20 @@ const bench: PropDef = {
     }
     return s.build('bench');
   },
-  colliders: () => [bx([-0.9, 0, -0.19], [0.9, 0.46, 0.19], 'wood')],
+  colliders: (v) => PROP_COLLIDERS.bench(v),
 };
 
 const detector: PropDef = {
   cacheable: true,
   build(lib) {
     const s = new Sink(lib);
-    for (const x of [-0.5, 0.5]) s.add('paintGrey', rbox(0.14, 2.1, 0.55, 0.03, 2, { p: [x, 1.05, 0] }));
-    s.add('paintGrey', rbox(1.14, 0.22, 0.55, 0.03, 2, { p: [0, 2.2, 0] }));
+    for (const x of [-0.8, 0.8]) s.add('paintGrey', rbox(0.12, 2.1, 0.5, 0.03, 2, { p: [x, 1.05, 0] }));
+    s.add('paintGrey', rbox(1.72, 0.2, 0.5, 0.03, 2, { p: [0, 2.2, 0] }));
     s.add('lampRed', box(0.1, 0.05, 0.05, { p: [0, 2.2, -0.28] }));
     s.add('black', box(0.3, 0.1, 0.02, { p: [0, 2.2, -0.28] }));
     return s.build('detector');
   },
-  colliders: () => [bx([-0.57, 0, -0.28], [-0.43, 2.3, 0.28], 'metal'), bx([0.43, 0, -0.28], [0.57, 2.3, 0.28], 'metal')],
+  colliders: (v) => PROP_COLLIDERS.detector(v),
 };
 
 const washer: PropDef = {
@@ -519,7 +484,7 @@ const washer: PropDef = {
     s.add('lampCyan', box(0.06, 0.03, 0.01, { p: [0.2, 1.18, -0.52] }));
     return s.build('washer');
   },
-  colliders: () => [bx([-0.5, 0, -0.5], [0.5, 1.35, 0.5], 'metal')],
+  colliders: (v) => PROP_COLLIDERS.washer(v),
 };
 
 const cart: PropDef = {
@@ -534,7 +499,7 @@ const cart: PropDef = {
     }
     return s.build('cart');
   },
-  colliders: () => [bx([-0.5, 0, -0.32], [0.5, 0.92, 0.32], 'fabric')],
+  colliders: (v) => PROP_COLLIDERS.cart(v),
 };
 
 function lockerUnits(s: Sink, n: number, zFace: number, faceDir: 1 | -1): void {
@@ -558,10 +523,7 @@ const lockers: PropDef = {
     lockerUnits(s, v || 4, -0.25 + 0.0, -1);
     return s.build('lockers');
   },
-  colliders(v) {
-    const L = (v || 4) * 0.45;
-    return [bx([-L / 2, 0, -0.25], [L / 2, 1.98, 0.25], 'metal')];
-  },
+  colliders: (v) => PROP_COLLIDERS.lockers(v),
 };
 
 const lockersDouble: PropDef = {
@@ -572,10 +534,7 @@ const lockersDouble: PropDef = {
     lockerUnits(s, v || 6, 0.5, 1);
     return s.build('lockersDouble');
   },
-  colliders(v) {
-    const L = (v || 6) * 0.45;
-    return [bx([-L / 2, 0, -0.5], [L / 2, 1.98, 0.5], 'metal')];
-  },
+  colliders: (v) => PROP_COLLIDERS.lockersDouble(v),
 };
 
 const lockersFallen: PropDef = {
@@ -594,7 +553,7 @@ const lockersFallen: PropDef = {
     }
     return s.build('lockersFallen');
   },
-  colliders: () => [bx([-0.68, 0, 0.0], [0.68, 0.52, 2.0], 'metal')],
+  colliders: (v) => PROP_COLLIDERS.lockersFallen(v),
 };
 
 // -------------------------------------------------------------------------- light fixtures

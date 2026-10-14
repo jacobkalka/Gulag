@@ -288,8 +288,8 @@ export function buildSublevel9(): MapDef {
   b.mirror(() => {
     b.prop('boiler', -8, 0, 10.6, 0, 1);
     // Ramp up to catwalk, open at the bottom, railing on the upper part
-    b.ramp(-18.7, 0, CW.z0, -12.5, CW.y, CW.z1, 'x', 1, 'diamond');
-    b.box(-16.0, 1.0, CW.z0 - 0.05, -12.5, CW.y + 1.0, CW.z0 + 0.05, 'paintGrey', { surface: 'metal' });
+    b.ramp(-17.6, 0, CW.z0, -12.5, CW.y, CW.z1, 'x', 1, 'diamond');
+    b.box(-15.4, 1.0, CW.z0 - 0.05, -12.5, CW.y + 1.0, CW.z0 + 0.05, 'paintGrey', { surface: 'metal' });
     // Catwalk supports
     for (const x of [-12.4, -8.3, -4.2]) b.box(x - 0.12, 0, CW.z0 + 0.02, x + 0.12, CW.y - 0.2, CW.z0 + 0.26, 'paintGrey', { surface: 'metal' });
     // Floor clutter: crates, valve station, pipe bundle
@@ -298,8 +298,8 @@ export function buildSublevel9(): MapDef {
     b.prop('crate', -15.5, 0, 7.3, Math.PI / 2, 2);
     b.prop('valve', -4.2, 0, 7.6, 0, 0);
     b.prop('pipes', -12.6, 0, 9.0, Math.PI / 2, 0);
-    b.prop('barrel', -18.2, 0, 13.6, 0, 0);
-    b.prop('barrel', -17.6, 0, 13.8, 0, 1);
+    b.prop('barrel', -18.3, 0, 12.2, 0, 0);
+    b.prop('barrel', -17.7, 0, 12.5, 0, 1);
     b.prop('crateSmall', -11.0, CW.y, 15.7, 0.3, 0);
     // Lights: sodium pendants over the floor, furnace glow
     b.light([-12.0, 5.2, 10.2], SODIUM, 7, 16, 'pendant', { priority: 1 });
@@ -421,8 +421,9 @@ export function buildSublevel9(): MapDef {
     b.prop('detector', -19.6, 0, 2.5, Math.PI / 2, 0);
     b.prop('detector', -19.6, 0, -2.5, Math.PI / 2, 1);
     b.prop('crateSmall', -24.3, 0, 5.2, 0.2, 1);
-    b.light([-22.0, H.spawn - 0.15, 0.0], b.mirrored ? 0x3cc8ff : TEAM_A, 4.5, 10, 'emergency', { priority: 3 });
-    b.light([-22.5, H.spawn - 0.15, 4.0], WARM, 2.6, 7, 'cage', { priority: 0 });
+    b.light([-24.6, H.spawn - 0.3, 0.0], b.mirrored ? 0x3cc8ff : TEAM_A, 1.6, 7, 'emergency', { priority: 1 });
+    b.light([-21.8, H.spawn - 0.15, 2.6], WARM, 3.0, 8, 'cage', { priority: 2 });
+    b.light([-21.8, H.spawn - 0.15, -2.6], WARM, 3.0, 8, 'cage', { priority: 2, flicker: b.mirrored ? 4 : 0 });
     b.decal([-24.73, 2.2, 0], [1, 0, 0], [3.2, 1.2], 'sign', { text: b.mirrored ? 'INTAKE B' : 'INTAKE A', color: b.mirrored ? '#3cc8ff' : '#ff6a1a' });
 
     // --- PUMP ROOM
