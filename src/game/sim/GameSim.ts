@@ -40,6 +40,36 @@ export function makePlayer(cfg: SimPlayerConfig): PlayerState {
   };
 }
 
+/**
+ * Movement + weapon state for one player and one tick. Shared by the host simulation and the
+ * client's prediction so both evolve the local player identically.
+ */
+export function stepPlayerCore(p: PlayerState, inp: PlayerInput, world: CollisionWorld, frozen: boolean, combat: boolean, now: number, events: GameEvent[]): FireRequest | null {
+  const w = activeWeapon(p);
+  const mv = stepMovement(p, inp, world, DT, frozen, w);
+  if (mv.jumped) events.push({ type: 'jump', player: p.id });
+  if (mv.landed > 4) events.push({ type: 'land', player: p.id, speed: mv.landed });
+  return stepWeapon(p, inp, DT, frozen || !combat, now, events);
+}
+
+/** End-of-tick bookkeeping (edge detection state, timers, health regen). */
+export function finishPlayerStep(p: PlayerState, inp: PlayerInput, rules: MatchRules): void {
+  p.prevButtons = inp.buttons;
+  p.lastInputSeq = inp.seq;
+  if (p.spawnProt > 0) p.spawnProt -= DT;
+  if (p.flash > 0) p.flash = Math.max(0, p.flash - DT / 2.6);
+  p.sinceHurt += DT;
+  if (p.sinceHurt > rules.regenDelay && p.hp < 100) p.hp = Math.min(100, p.hp + rules.regenRate * DT);
+}
+
+export function isFrozen(phase: RoundState['phase']): boolean {
+  return phase === 'countdown' || phase === 'roundEnd' || phase === 'matchEnd' || phase === 'warmup';
+}
+
+export function isCombat(phase: RoundState['phase']): boolean {
+  return phase === 'live' || phase === 'overtime';
+}
+
 export function poseOf(p: PlayerState): BodyPose {
   return { x: p.x, y: p.y, z: p.z, crouch: p.crouch, slide: p.slideT > 0, yaw: p.yaw };
 }
@@ -241,8 +271,8 @@ export class GameSim {
         } else this.startRound();
       }
     }
-    const frozen = r.phase === 'countdown' || r.phase === 'roundEnd' || r.phase === 'matchEnd' || r.phase === 'warmup';
-    const combat = r.phase === 'live' || r.phase === 'overtime';
+    const frozen = isFrozen(r.phase);
+    const combat = isCombat(r.phase);
 
     // ---- players
     for (const p of this.players) {
@@ -257,20 +287,11 @@ export class GameSim {
         continue;
       }
       if (!inp) continue;
-      const w = activeWeapon(p);
-      const mv = stepMovement(p, inp, this.world, DT, frozen, w);
-      if (mv.jumped) this.events.push({ type: 'jump', player: p.id });
-      if (mv.landed > 4) this.events.push({ type: 'land', player: p.id, speed: mv.landed });
-      const fire = stepWeapon(p, inp, DT, frozen || !combat, now, this.events);
+      const fire = stepPlayerCore(p, inp, this.world, frozen, combat, now, this.events);
       if (fire) this.resolveShot(p, fire);
       this.stepMelee(p);
       if (combat && p.meleeT <= 0 && p.swapT <= 0) this.tryThrow(p, inp);
-      p.prevButtons = inp.buttons;
-      p.lastInputSeq = inp.seq;
-      if (p.spawnProt > 0) p.spawnProt -= DT;
-      if (p.flash > 0) p.flash = Math.max(0, p.flash - DT / 2.6);
-      p.sinceHurt += DT;
-      if (p.sinceHurt > this.rules.regenDelay && p.hp < 100) p.hp = Math.min(100, p.hp + this.rules.regenRate * DT);
+      finishPlayerStep(p, inp, this.rules);
     }
     this.separatePlayers();
     this.stepGrenades();

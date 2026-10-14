@@ -10,6 +10,11 @@ import { clamp, damp, lerp } from '@/shared/math';
 
 const UPPER = 0.29;
 const FORE = 0.27;
+const SHOULDER_R = new THREE.Vector3(0.2, -0.32, 0.16);
+const SHOULDER_L = new THREE.Vector3(-0.22, -0.34, 0.08);
+/** Comfortable reach; beyond it the shoulder leans in toward the grip (long foregrips). */
+const REACH = (UPPER + FORE) * 0.96;
+const _tl = new THREE.Vector3();
 
 function handMesh(lib: MaterialLibrary, side: 1 | -1, curl: number): THREE.Group {
   const glove = lib.get('leather');
@@ -105,8 +110,8 @@ export class Viewmodel {
     this.armR = buildArm(lib, 1, 1.15);
     this.armL = buildArm(lib, -1, 1.25);
     this.rig.add(this.armR.shoulder, this.armL.shoulder);
-    this.armR.shoulder.position.set(0.2, -0.32, 0.16);
-    this.armL.shoulder.position.set(-0.22, -0.34, 0.08);
+    this.armR.shoulder.position.copy(SHOULDER_R);
+    this.armL.shoulder.position.copy(SHOULDER_L);
     this.hemi = new THREE.HemisphereLight(0x7d8aa0, 0x2a2622, 0.2);
     this.scene.add(this.hemi);
     for (let i = 0; i < 4; i++) {
@@ -281,8 +286,21 @@ export class Viewmodel {
     const handLq = wq.clone().multiply(leftGrip(w.leftHand));
     const poleR = this.rig.position.clone().add(new THREE.Vector3(0.9, -1.2, 0.3).applyQuaternion(rigQ));
     const poleL = this.rig.position.clone().add(new THREE.Vector3(-0.9, -1.2, 0.1).applyQuaternion(rigQ));
-    solveArm(this.armR.shoulder, this.armR.elbow, this.armR.hand, wristTarget(gripR, handRq), poleR, UPPER, FORE, handRq);
-    solveArm(this.armL.shoulder, this.armL.elbow, this.armL.hand, wristTarget(gripL, handLq), poleL, UPPER, FORE, handLq);
+    const wristR = wristTarget(gripR, handRq);
+    const wristL = wristTarget(gripL, handLq);
+    this.fitShoulder(this.armR.shoulder, SHOULDER_R, wristR);
+    this.fitShoulder(this.armL.shoulder, SHOULDER_L, wristL);
+    solveArm(this.armR.shoulder, this.armR.elbow, this.armR.hand, wristR, poleR, UPPER, FORE, handRq);
+    solveArm(this.armL.shoulder, this.armL.elbow, this.armL.hand, wristL, poleL, UPPER, FORE, handLq);
+  }
+
+  /** Moves a shoulder toward an out-of-reach wrist target so the hand always lands on its grip. */
+  private fitShoulder(shoulder: THREE.Object3D, base: THREE.Vector3, wristWorld: THREE.Vector3): void {
+    const d = this.rig.worldToLocal(_tl.copy(wristWorld)).sub(base);
+    const len = d.length();
+    shoulder.position.copy(base);
+    if (len > REACH) shoulder.position.addScaledVector(d, (len - REACH) / len);
+    shoulder.updateMatrixWorld(true);
   }
 
   setTeamAccent(team: 0 | 1): void {

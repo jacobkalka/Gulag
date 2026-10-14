@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { Renderer, DEFAULT_RENDER_OPTIONS } from '@/engine/Renderer';
 import { QUALITY_PRESETS, type QualityLevel } from '@/engine/quality';
 import { Assets } from '@/assets/Assets';
-import { buildWeapon } from '@/assets/models/weapons';
+import { buildWeapon, weaponIds } from '@/assets/models/weapons';
 import { buildCharacter, poseWithWeapon } from '@/assets/models/character';
 import { buildSublevel9 } from '@/game/world/sublevel9';
 import { MapView } from '@/game/view/MapView';
@@ -137,12 +137,23 @@ function gunLineup(renderer: Renderer, assets: Assets): void {
   const env = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
   assets.materials.setEnvMap(env);
   scene.environmentIntensity = 0.35;
-  const ids = (location.hash.split('/')[3] ?? 'halberd,rook9,warden').split(',');
+  const ids = (location.hash.split('/')[3] ?? weaponIds().join(',')).split(',');
+  // grid: up to 3 columns, muzzles pointing right on screen (-X)
+  const cols = ids.length > 4 ? 3 : 1;
+  const rows = Math.ceil(ids.length / cols);
+  const labels: { el: HTMLDivElement; pos: THREE.Vector3 }[] = [];
   ids.forEach((id, i) => {
+    const c = i % cols;
+    const r = Math.floor(i / cols);
     const w = buildWeapon(assets.materials, id);
     w.root.rotation.y = Math.PI / 2;
-    w.root.position.set(0, 0.32 - i * 0.26, 0);
+    w.root.position.set(((cols - 1) / 2 - c) * 1.15, ((rows - 1) / 2 - r) * 0.34, 0);
     scene.add(w.root);
+    const el = document.createElement('div');
+    el.textContent = id.toUpperCase();
+    el.style.cssText = 'position:fixed;color:#ff6a13;font:600 13px monospace;letter-spacing:2px;pointer-events:none;transform:translate(-50%,0)';
+    document.body.appendChild(el);
+    labels.push({ el, pos: w.root.position.clone().add(new THREE.Vector3(0, -0.12, 0)) });
   });
   const key = new THREE.DirectionalLight(0xfff2e0, 2.6);
   key.position.set(1.5, 2, 3);
@@ -151,12 +162,19 @@ function gunLineup(renderer: Renderer, assets: Assets): void {
   rim.position.set(-2, 1, -2);
   scene.add(rim);
   const cam = new THREE.PerspectiveCamera(30, 1, 0.01, 50);
-  cam.position.set(0.12, 0.08, -1.75);
-  cam.lookAt(0.12, 0.05, 0);
+  const dist = cols === 1 ? 1.75 + Math.max(0, rows - 3) * 0.3 : 3.7;
+  cam.position.set(0.12, 0.04, -dist);
+  cam.lookAt(0.12, 0.02, 0);
   renderer.setScenes(scene, cam);
   renderer.resize();
   let frames = 0;
+  const v = new THREE.Vector3();
   const loop = () => {
+    for (const l of labels) {
+      v.copy(l.pos).project(cam);
+      l.el.style.left = `${(v.x * 0.5 + 0.5) * innerWidth}px`;
+      l.el.style.top = `${(-v.y * 0.5 + 0.5) * innerHeight}px`;
+    }
     renderer.render(1 / 60);
     (window as any).__frames = ++frames;
     requestAnimationFrame(loop);

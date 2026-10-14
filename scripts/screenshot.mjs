@@ -15,7 +15,7 @@ const t0 = Date.now();
 await page.goto(url, { waitUntil: 'load' });
 if (evalJs) await page.evaluate(evalJs);
 await page.waitForTimeout(+waitMs);
-await page.screenshot({ path: out });
+await page.screenshot({ path: out, timeout: 180000 });
 const info = await page.evaluate(() => ({ frames: window.__frames, gl: window.__gl, stats: window.__stats }));
 console.log(JSON.stringify(info), `elapsed ${Date.now() - t0}ms`);
 console.log(logs.slice(-40).join('\n'));

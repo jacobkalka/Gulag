@@ -78,6 +78,10 @@ export function grbox(f0: number, f1: number, u0: number, u1: number, hw: number
 export function gcyl(f0: number, f1: number, u: number, r: number, seg = 18, x = 0, rEnd = r): Geo {
   return cylZ(r, f1 - f0, seg, { p: [x, u, -(f0 + f1) / 2] }, rEnd);
 }
+/** Lathe profile ([radius, distance]) turned along gun-forward (-Z), starting at F=f. */
+export function glathe(points: P2[], seg: number, f: number, u: number, x = 0): Geo {
+  return latheZ(points, seg, { p: [x, u, -f], r: [Math.PI, 0, 0] });
+}
 export function sideAt(points: P2[], width: number, x = 0, opts: { round?: number; bevel?: number; holes?: P2[][] } = {}): Geo {
   const g = side(points, width, opts);
   if (x) xf(g, { p: [x, 0, 0] });
@@ -231,12 +235,12 @@ export type MuzzleStyle = 'brake' | 'flash' | 'comp' | 'suppressor' | 'thread';
 
 export function muzzle(s: PartSink, m: GunMats, f: number, u: number, style: MuzzleStyle, r = 0.0125): number {
   if (style === 'thread') {
-    s.add(m.steel, latheZ([[0.0001, 0], [r * 0.8, 0], [r * 0.8, 0.018], [r * 0.6, 0.02], [0.0001, 0.02]], 20, { p: [0, u, -f] }));
+    s.add(m.steel, glathe([[0.0001, 0], [r * 0.8, 0], [r * 0.8, 0.018], [r * 0.6, 0.02], [0.0001, 0.02]], 20, f, u));
     return f + 0.02;
   }
   if (style === 'suppressor') {
     const L = 0.16;
-    s.add(m.steel, latheZ([[0.0001, 0], [r * 0.9, 0], [r * 1.25, 0.012], [r * 1.25, L - 0.01], [r * 1.05, L], [0.0001, L]], 28, { p: [0, u, -f] }));
+    s.add(m.steel, glathe([[0.0001, 0], [r * 0.9, 0], [r * 1.25, 0.012], [r * 1.25, L - 0.01], [r * 1.05, L], [0.0001, L]], 28, f, u));
     s.add(m.dark, gcyl(f + L - 0.001, f + L + 0.0004, u, r * 0.4, 12));
     // knurled ring
     const ribs: Geo[] = [];
@@ -245,7 +249,7 @@ export function muzzle(s: PartSink, m: GunMats, f: number, u: number, style: Muz
     return f + L;
   }
   const L = style === 'flash' ? 0.055 : 0.06;
-  s.add(m.steel, latheZ([[0.0001, 0], [r * 0.75, 0], [r, 0.006], [r, L - 0.004], [r * 0.85, L], [0.0001, L]], 22, { p: [0, u, -f] }));
+  s.add(m.steel, glathe([[0.0001, 0], [r * 0.75, 0], [r, 0.006], [r, L - 0.004], [r * 0.85, L], [0.0001, L]], 22, f, u));
   const dark: Geo[] = [];
   if (style === 'brake') {
     for (let i = 0; i < 3; i++) {
@@ -497,16 +501,16 @@ export function optic(s: PartSink, m: GunMats, lib: MaterialLibrary, style: Opti
     // rings
     for (const rf of [f + 0.06, f + L - 0.08]) {
       s.add(m.alu, gbox(rf - 0.009, rf + 0.009, u, u + 0.012, 0.012));
-      s.add(m.alu, latheZ([[r + 0.0005, 0], [r + 0.005, 0], [r + 0.005, 0.018], [r + 0.0005, 0.018]], 24, { p: [0, axis, -(rf - 0.009)] }));
+      s.add(m.alu, glathe([[r + 0.0005, 0], [r + 0.005, 0], [r + 0.005, 0.018], [r + 0.0005, 0.018]], 24, rf - 0.009, axis));
       s.add(m.alu, gbox(rf - 0.009, rf + 0.009, u + 0.008, axis, 0.007));
     }
     // tube
     const objR = big ? 0.026 : 0.02;
-    s.add(m.receiver, latheZ([
+    s.add(m.receiver, glathe([
       [0.0001, 0],
       [r + 0.006, 0], [r + 0.006, 0.05], [r, 0.07],
       [r, L - 0.11], [objR, L - 0.06], [objR + 0.002, L - 0.004], [objR, L], [0.0001, L],
-    ], 32, { p: [0, axis, -f] }));
+    ], 32, f, axis));
     // turrets
     s.add(m.alu, cyl0(0.009, 0.018, [0, axis + r + 0.006, -(f + L * 0.45)]));
     s.add(m.alu, cylX(0.009, 0.018, 16, { p: [r + 0.006, axis, -(f + L * 0.45)] }));
