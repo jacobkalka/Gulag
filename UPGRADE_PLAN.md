@@ -383,7 +383,6 @@ Status: ☐ open, ☑ done (verified by running it), ◐ partial (see notes).
     - more lockers and spawn-room lighting.
 
     Two art cameras were reframed (one sat behind a pillar).
-  - Verified so far: lint, typecheck, 133 unit tests, the bot soak and `npm run botsim`,
-    `audit:shadows` and `audit:textures` pass. `audit:contrast` passed 8/9; the spawn room was at
-    35.1% near-black against a 35% limit before its last light tweak. The final contrast and e2e
-    runs are recorded in the next entry.
+  - Verified: lint, typecheck, 133 unit tests, the bot soak and `npm run botsim` pass;
+    `audit:shadows`, `audit:textures` and `audit:contrast` (9/9 cameras) pass; e2e two-tab
+    networked round and touchpad mode pass on the new map.
