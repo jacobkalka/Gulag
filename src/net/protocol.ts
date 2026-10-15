@@ -13,7 +13,7 @@ import { ByteReader, ByteWriter } from './codec';
 //   both            PING/PONG round-trip measurement
 // Reliable, ordered channel ('r'), JSON: room lobby, match start, game events, roster, chat.
 
-export const PROTOCOL_VERSION = 2;
+export const PROTOCOL_VERSION = 3;
 
 export const MSG = { INPUT: 1, SNAPSHOT: 2, PING: 3, PONG: 4 } as const;
 
@@ -159,7 +159,7 @@ export function encodeSnapshot(tick: number, round: RoundState, players: PlayerS
   // round
   const c = round.capture;
   w.u8(PHASES.indexOf(round.phase)).f32(round.timer).u8(round.round).u8(round.score[0]).u8(round.score[1]);
-  w.u8((c.active ? 1 : 0) | (c.contested ? 2 : 0) | ((c.team + 1) << 2)).f32(c.progress);
+  w.u8((c.active ? 1 : 0) | (c.contested ? 2 : 0) | ((c.team + 1) << 2) | (round.skinTeam << 4)).f32(c.progress);
   w.i8(round.lastWinner).u8(Math.max(0, REASONS.indexOf(round.lastReason))).i8(round.matchWinner);
   // players
   w.u8(players.length);
@@ -263,6 +263,7 @@ export function decodeSnapshot(r: ByteReader): Snapshot {
     lastWinner,
     lastReason,
     matchWinner,
+    skinTeam: ((cb >> 4) & 1) as 0 | 1,
   };
   const n = r.u8();
   const players: SnapPlayer[] = [];

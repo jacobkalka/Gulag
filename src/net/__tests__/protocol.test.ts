@@ -93,6 +93,7 @@ describe('snapshots', () => {
     expect(snap.selfId).toBe(1);
     expect(snap.round.phase).toBe(sim.round.phase);
     expect(snap.round.score).toEqual(sim.round.score);
+    expect(snap.round.skinTeam).toBe(sim.round.skinTeam);
     expect(snap.players).toHaveLength(4);
     for (const sp of snap.players) {
       const p = sim.player(sp.id)!;
@@ -113,6 +114,21 @@ describe('snapshots', () => {
     expect(copy.shotCount).toBe(self.shotCount);
     expect(copy.life).toBe(self.life);
     expect(copy.fireCd).toBeCloseTo(self.fireCd, 5);
+  });
+});
+
+describe('team skins', () => {
+  it('pick the black-and-red side per match from the host seed and reach clients', () => {
+    const picks = new Set<number>();
+    for (let seed = 1; seed <= 12; seed++) {
+      const sim = new GameSim(map, PLAYLISTS['2v2'].rules, seed);
+      picks.add(sim.round.skinTeam);
+      const r = new ByteReader(encodeSnapshot(sim.tick, sim.round, sim.players, sim.grenades, null, 0));
+      expect(r.u8()).toBe(MSG.SNAPSHOT);
+      expect(decodeSnapshot(r).round.skinTeam).toBe(sim.round.skinTeam);
+    }
+    // both sides get it across matches
+    expect(picks).toEqual(new Set([0, 1]));
   });
 });
 

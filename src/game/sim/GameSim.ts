@@ -94,6 +94,7 @@ export class GameSim {
     lastWinner: -1,
     lastReason: '',
     matchWinner: -1,
+    skinTeam: 0,
   };
   private rng: Rng;
   private nextGrenadeId = 1;
@@ -109,6 +110,8 @@ export class GameSim {
   ) {
     this.world = world ?? CollisionWorld.fromMap(map, rules.mapTags);
     this.rng = new Rng(seed);
+    // which side wears black-and-red: random per match (the host seeds from the clock), synced
+    this.round.skinTeam = this.rng.next() < 0.5 ? 0 : 1;
   }
 
   get time(): number {

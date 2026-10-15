@@ -161,6 +161,8 @@ export interface RoundState {
   lastWinner: -1 | 0 | 1;
   lastReason: 'elimination' | 'capture' | 'draw' | '';
   matchWinner: -1 | 0 | 1;
+  /** Team wearing the black-and-red soldiers this match (the other wears woodland camo). */
+  skinTeam: 0 | 1;
 }
 
 export interface ShotTrace {

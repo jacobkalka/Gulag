@@ -163,6 +163,15 @@ export class MaterialLibrary {
     return m;
   }
 
+  /** Registers an outside material (e.g. from a GLB) so env map changes reach it too. */
+  adopt(key: string, mat: THREE.Material): void {
+    this.cache.set(key, mat);
+    if (this.envMap && (mat as THREE.MeshStandardMaterial).isMeshStandardMaterial) {
+      (mat as THREE.MeshStandardMaterial).envMap = this.envMap;
+      mat.needsUpdate = true;
+    }
+  }
+
   reticle(style: 'holo' | 'dot' | 'chevron', color: number): THREE.MeshBasicMaterial {
     const key = `${style}:${color}`;
     let m = this.reticles.get(key);

@@ -13,7 +13,9 @@ import { currentSpread, recoilKick } from '@/game/sim/weaponLogic';
 import { SURFACES, OPAQUE } from '@/game/world/collision';
 import { MapView } from './MapView';
 import { Viewmodel } from './Viewmodel';
-import { CharacterView, type RenderPlayer } from './CharacterView';
+import type { RenderPlayer } from './CharacterView';
+import { SoldierView } from './soldier/SoldierView';
+import { skinFor, type SoldierSkin } from './soldier/soldierAssets';
 import { Effects } from './Effects';
 import { CameraFeel } from './CameraFeel';
 import { Flashlights } from './Flashlights';
@@ -73,7 +75,8 @@ export class MatchView {
   readonly hud: Hud;
   private mapView: MapView;
   private vm: Viewmodel;
-  private chars = new Map<number, CharacterView>();
+  private chars = new Map<number, SoldierView>();
+  private charSkin = new Map<number, SoldierSkin>();
   private effects: Effects;
   private grenadeMeshes = new Map<number, THREE.Mesh>();
   private env: THREE.Texture | null = null;
@@ -900,9 +903,16 @@ export class MatchView {
         if (cv) cv.root.visible = false;
         continue;
       }
+      // team skins: one side black-and-red, the other woodland camo (host picks per match)
+      const skin = skinFor(p.team, s.round.skinTeam ?? 0);
+      if (cv && this.charSkin.get(p.id) !== skin) {
+        cv.dispose();
+        cv = undefined;
+      }
       if (!cv) {
-        cv = new CharacterView(this.o.assets.materials, p.team);
+        cv = new SoldierView(this.o.assets.materials, this.o.assets.soldiers[skin], p.team);
         this.chars.set(p.id, cv);
+        this.charSkin.set(p.id, skin);
         this.scene.add(cv.root);
       }
       const isLocalFP = local && p.id === local.id && p.alive;

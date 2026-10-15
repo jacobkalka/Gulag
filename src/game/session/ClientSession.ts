@@ -133,6 +133,8 @@ export class ClientSession implements MatchSession {
       lastWinner: -1,
       lastReason: '',
       matchWinner: -1,
+      // the first snapshot carries the host's pick
+      skinTeam: 0,
     };
   }
 

@@ -10,7 +10,7 @@ import { kelvinColor } from './lighting/lightKinds';
 // Light objects always exist (intensity 0 when off) so toggling never recompiles shaders.
 
 /** How bright an enemy's flashlight looks to you, relative to a teammate's. */
-export const ENEMY_FLASHLIGHT = { light: 0.4, beam: 0.4, glare: 0.35 };
+export const ENEMY_FLASHLIGHT = { light: 0.4, beam: 0.4, glare: 0.25 };
 /**
  * Beam half-angle (radians): a tight tactical light that lights what it points at, not the room.
  * The lens pattern (cookie) keeps nearly all of the light in the hotspot.
@@ -205,9 +205,10 @@ export class Flashlights {
       const facing = Math.max(0, f.dot(toCam));
       g.visible = facing > 0.6 && camDir.dot(toCam) < 0;
       g.position.copy(origin);
-      const s = (0.25 + 0.9 * Math.pow(facing, 6)) * (dim ? 0.7 : 1);
+      // a small hot lens with a short streak; an enemy's is smaller and much fainter
+      const s = (0.1 + 0.32 * Math.pow(facing, 8)) * (dim ? 0.6 : 1);
       g.scale.set(s * 1.6, s, 1);
-      g.material.opacity = Math.pow(facing, 4) * (dim ? ENEMY_FLASHLIGHT.glare : 1);
+      g.material.opacity = Math.pow(facing, 6) * (dim ? ENEMY_FLASHLIGHT.glare : 0.85);
     }
   }
 }

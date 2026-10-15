@@ -3,7 +3,8 @@ import { Renderer, DEFAULT_RENDER_OPTIONS } from '@/engine/Renderer';
 import { QUALITY_PRESETS, type QualityLevel } from '@/engine/quality';
 import { Assets } from '@/assets/Assets';
 import { buildWeapon, weaponIds } from '@/assets/models/weapons';
-import { buildCharacter, poseWithWeapon } from '@/assets/models/character';
+import { SoldierView } from '@/game/view/soldier/SoldierView';
+import type { RenderPlayer } from '@/game/view/CharacterView';
 import { buildSublevel9 } from '@/game/world/sublevel9';
 import { MapView } from '@/game/view/MapView';
 import { bakeReflectionProbe } from '@/game/view/ReflectionProbe';
@@ -65,23 +66,10 @@ async function scene(renderer: Renderer, assets: Assets, params: URLSearchParams
   sc.fog = new THREE.FogExp2(0x0b0f14, 0.028);
   sc.add(view.root);
 
-  // Character holding the Halberd beside the pillar
-  const rig = buildCharacter(assets.materials, 0);
-  rig.root.position.set(0.6, 0, 2.6);
-  rig.root.rotation.y = -0.55;
-  sc.add(rig.root);
-  rig.spine.rotation.x = 0.05;
-  rig.chest.rotation.y = 0.12;
-  rig.neck.rotation.x = -0.05;
-  rig.hipL.rotation.x = -0.18;
-  rig.kneeL.rotation.x = 0.28;
-  rig.hipR.rotation.x = 0.12;
-  rig.kneeR.rotation.x = 0.12;
-  rig.footL.rotation.x = -0.1;
-  const halberd = buildWeapon(assets.materials, 'halberd');
-  const mount = new THREE.Group();
-  rig.chest.add(mount);
-  poseWithWeapon(rig, halberd, -0.12, mount);
+  // Soldier holding the Halberd beside the pillar
+  const soldier = new SoldierView(assets.materials, assets.soldiers.red, 0);
+  sc.add(soldier.root);
+  soldier.update(standing({ x: 0.6, z: 2.6, yaw: -0.55, pitch: -0.12, weapon: 'halberd' }), 1 / 60);
 
   // Weapons laid on a crate in the foreground
   const crate = PROPS.crate.build(assets.materials, 0);
@@ -207,14 +195,9 @@ function charLineup(renderer: Renderer, assets: Assets): void {
   scene.environmentIntensity = 0.25;
   const yaws = [0, Math.PI / 2, Math.PI, -Math.PI / 4];
   yaws.forEach((yaw, i) => {
-    const rig = buildCharacter(assets.materials, (i % 2) as 0 | 1);
-    rig.root.position.set(-2.4 + i * 1.6, 0, 0);
-    rig.root.rotation.y = yaw;
-    scene.add(rig.root);
-    const w = buildWeapon(assets.materials, i === 3 ? 'rook9' : 'halberd');
-    const mount = new THREE.Group();
-    rig.chest.add(mount);
-    poseWithWeapon(rig, w, -0.1, mount);
+    const soldier = new SoldierView(assets.materials, i % 2 ? assets.soldiers.camo : assets.soldiers.red, (i % 2) as 0 | 1);
+    scene.add(soldier.root);
+    soldier.update(standing({ x: -2.4 + i * 1.6, z: 0, yaw, pitch: -0.1, weapon: i === 3 ? 'rook9' : 'halberd' }), 1 / 60);
   });
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(20, 20), assets.materials.get('concreteDark'));
   floor.rotation.x = -Math.PI / 2;
@@ -239,4 +222,12 @@ function charLineup(renderer: Renderer, assets: Assets): void {
     requestAnimationFrame(loop);
   };
   loop();
+}
+
+/** A standing, aiming render state for static dev shots. */
+function standing(o: { x: number; z: number; yaw: number; pitch: number; weapon: string }): RenderPlayer {
+  return {
+    id: 0, team: 0, name: 'soldier', alive: true, x: o.x, y: 0, z: o.z, vx: 0, vz: 0, yaw: o.yaw, pitch: o.pitch,
+    crouch: 0, slide: false, grounded: true, ads: 0, sprint: false, weapon: o.weapon, reloading: false, hp: 100, deathYaw: 0,
+  };
 }

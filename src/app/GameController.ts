@@ -21,7 +21,9 @@ import type { Loadout } from '@/data/progression';
 import type { BotDifficulty } from '@/game/bots/BotBrain';
 import { RoomController } from './rooms';
 import { buildWeapon, type WeaponModel } from '@/assets/models/weapons';
-import { buildCharacter, poseWithWeapon, type Rig } from '@/assets/models/character';
+import { SoldierView } from '@/game/view/soldier/SoldierView';
+import type { SoldierSkin } from '@/game/view/soldier/soldierAssets';
+import type { RenderPlayer } from '@/game/view/CharacterView';
 import { PerfOverlay } from '@/ui/PerfOverlay';
 
 // Owns the renderer, procedural assets, input and the frame loop. Screens (Preact) call
@@ -190,30 +192,30 @@ export class GameController {
     const keep = new Set(list.map((o) => o.key));
     for (const op of [...st.ops]) {
       if (!keep.has(op.key)) {
-        st.group.remove(op.rig.root);
+        op.view.dispose();
         st.ops.splice(st.ops.indexOf(op), 1);
       }
     }
     list.slice(0, 4).forEach((o, i) => {
       let op = st.ops.find((x) => x.key === o.key);
       if (!op) {
-        const rig = buildCharacter(this.assets.materials, 0);
-        const mount = new THREE.Group();
-        rig.chest.add(mount);
-        st.group.add(rig.root);
-        op = { key: o.key, rig, mount, weapon: null, weaponId: '', phase: Math.random() * 6 };
+        // you in black-and-red, the party alternating woodland camo and black-and-red
+        const skin: SoldierSkin = i % 2 === 0 ? 'red' : 'camo';
+        const view = new SoldierView(this.assets.materials, this.assets.soldiers[skin], 0);
+        st.group.add(view.root);
+        op = { key: o.key, view, weaponId: '', phase: Math.random() * 6, x: 0, z: 0, yaw: 0 };
         st.ops.push(op);
       }
       if (op.weaponId !== o.weapon) {
-        if (op.weapon) op.mount.remove(op.weapon.root);
-        op.weapon = buildWeapon(this.assets.materials, o.weapon);
+        op.view.setWeapon(o.weapon);
         op.weaponId = o.weapon;
       }
       // you in the middle, then left, right, far left (the right side of the screen holds the UI)
       const slot = [0, -1, 1, -2][i] ?? 0;
-      op.rig.root.position.set(slot * 0.95, 0, -Math.abs(slot) * 0.35);
-      // rigs face -Z: turn around to face the camera, angled slightly toward it (+X)
-      op.rig.root.rotation.y = Math.PI + 0.28 - slot * 0.12;
+      op.x = slot * 0.95;
+      op.z = -Math.abs(slot) * 0.35;
+      // soldiers face -Z: turn around to face the camera, angled slightly toward it (+X)
+      op.yaw = Math.PI + 0.28 - slot * 0.12;
       op.index = i;
     });
   }
@@ -230,8 +232,8 @@ export class GameController {
     const out: { key: string; x: number; y: number }[] = [];
     const v = new THREE.Vector3();
     for (const op of st.ops) {
-      op.rig.head.getWorldPosition(v);
-      v.y += 0.32;
+      op.view.rig.j('head').bone.getWorldPosition(v);
+      v.y += 0.3;
       v.project(cam);
       if (v.z > 1) continue;
       out.push({ key: op.key, x: (v.x * 0.5 + 0.5) * window.innerWidth, y: (-v.y * 0.5 + 0.5) * window.innerHeight });
@@ -247,18 +249,13 @@ export class GameController {
     st.group.visible = st.blend > 0.01;
     if (!st.group.visible) return 0;
     for (const op of st.ops) {
-      const r = op.rig;
-      const b = Math.sin(t * 1.7 + op.phase);
-      // relaxed low-ready stance with a little breathing
-      r.spine.rotation.x = 0.04 + b * 0.012;
-      r.chest.rotation.set(0.02 + b * 0.008, 0.1, 0);
-      r.neck.rotation.set(-0.06, -0.08 + Math.sin(t * 0.4 + op.phase) * 0.12, 0);
-      r.hipL.rotation.set(-0.08, 0, 0.06);
-      r.kneeL.rotation.x = 0.12;
-      r.hipR.rotation.set(0.1, 0, -0.08);
-      r.kneeR.rotation.x = 0.05;
-      // low ready: muzzle down and across the body so the silhouette reads from the front
-      if (op.weapon) poseWithWeapon(r, op.weapon, -0.5, op.mount, 0.75);
+      // relaxed low ready: muzzle down, glancing around now and then
+      const rp: RenderPlayer = {
+        id: op.index ?? 0, team: 0, name: op.key, alive: true, x: op.x, y: 0, z: op.z, vx: 0, vz: 0,
+        yaw: op.yaw + Math.sin(t * 0.4 + op.phase) * 0.12, pitch: -0.5, crouch: 0, slide: false, grounded: true,
+        ads: 0, sprint: false, weapon: op.weaponId || 'halberd', reloading: false, hp: 100, deathYaw: 0,
+      };
+      op.view.update(rp, dt);
     }
     const k = st.blend * st.blend * (3 - 2 * st.blend);
     // frame the lineup on the left half of the screen (UI lives on the right)
@@ -493,11 +490,12 @@ export class GameController {
 
 interface Operator {
   key: string;
-  rig: Rig;
-  mount: THREE.Group;
-  weapon: WeaponModel | null;
+  view: SoldierView;
   weaponId: string;
   phase: number;
+  x: number;
+  z: number;
+  yaw: number;
   index?: number;
 }
 

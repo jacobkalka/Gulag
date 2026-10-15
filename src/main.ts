@@ -23,6 +23,11 @@ async function boot(): Promise<void> {
     await runSwatches(canvas);
     return;
   }
+  if (route.startsWith('animtest') || new URLSearchParams(location.search).has('animtest')) {
+    const { runAnimTest } = await import('./dev/animtest');
+    await runAnimTest(canvas);
+    return;
+  }
   if (route.startsWith('arttest')) {
     const { runArtTest } = await import('./dev/arttest');
     await runArtTest(canvas);
