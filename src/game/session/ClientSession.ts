@@ -411,6 +411,7 @@ export class ClientSession implements MatchSession {
     p.sprinting = sp.sprinting;
     p.team = sp.team;
     p.bot = sp.bot;
+    p.flashlight = sp.flashlight;
     p.hp = sp.hp;
     p.slot = sp.slot;
     p.weapons[sp.slot].id = sp.weapon;

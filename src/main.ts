@@ -1,6 +1,9 @@
 import './ui/styles.css';
 import './ui/menu.css';
 import { render, h } from 'preact';
+import { applyShaderPatches } from './engine/shaderPatches';
+
+applyShaderPatches();
 
 // Entry point. Hash routes: #/swatches and #/arttest are dev views; everything else boots the game.
 const canvas = document.getElementById('c') as HTMLCanvasElement;

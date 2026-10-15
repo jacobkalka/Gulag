@@ -4,9 +4,11 @@ import type { MaterialLibrary } from '@/assets/materials';
 import { PROPS } from '@/assets/models/props';
 import { decalTexture, radialTexture } from '@/assets/textures/canvasTextures';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { LightManager } from './LightManager';
+import { LightRig } from './lighting/LightRig';
+import { BakedProbes } from './lighting/ProbeBaker';
 import { Atmosphere } from './Atmosphere';
 import type { QualityPreset } from '@/engine/quality';
+import { CollisionWorld } from '@/game/world/collision';
 
 // Builds the renderable map from a MapDef: merged static geometry per material,
 // props, decals, light fixtures (via LightManager) and atmosphere.
@@ -122,12 +124,13 @@ function mergeGeos(list: THREE.BufferGeometry[]): THREE.BufferGeometry {
 
 export class MapView {
   readonly root = new THREE.Group();
-  readonly lights: LightManager;
+  readonly lights: LightRig;
+  readonly probes: BakedProbes;
   readonly atmosphere: Atmosphere;
   readonly map: MapDef;
   private puddleMat: THREE.MeshStandardMaterial | null = null;
 
-  constructor(map: MapDef, lib: MaterialLibrary, quality: QualityPreset, opts: { activeTags?: string[] } = {}) {
+  constructor(map: MapDef, lib: MaterialLibrary, quality: QualityPreset, opts: { activeTags?: string[]; world?: CollisionWorld } = {}) {
     this.map = map;
     this.root.name = 'map';
     const tags = new Set(opts.activeTags ?? []);
@@ -190,7 +193,12 @@ export class MapView {
     }
     for (const g of cache.values()) g.traverse((o) => (o as THREE.Mesh).isMesh && (o as THREE.Mesh).geometry.dispose());
     // ---- lights: steady fixtures merge into the static batches, flickering ones stay separate
-    this.lights = new LightManager(lib, map.lights, quality.fixtureLights, quality.shadows ? quality.shadowedSpots : 0, quality.spotShadowSize);
+    this.lights = new LightRig(lib, map.lights, {
+      points: quality.fixtureLights,
+      shadowSpots: quality.shadows ? quality.shadowedSpots : 0,
+      shadowSize: quality.spotShadowSize,
+      shadowUpdates: quality.shadowUpdates,
+    });
     for (const f of this.lights.staticFixtures) mergeObject(f.group, chunkOf(f.x, f.z));
     this.root.add(this.lights.group);
     // ---- puddles merged into one mesh; signs keep their own canvas textures
@@ -219,6 +227,15 @@ export class MapView {
       mesh.name = `static:${b.mat.name}`;
       this.root.add(mesh);
     }
+    // baked bounce light from every fixture (and the moon through the roof)
+    const world = opts.world ?? CollisionWorld.fromMap(map, [...tags]);
+    this.probes = new BakedProbes(map, world, map.lights, {
+      spacing: 1.0,
+      bounce: 0.22,
+      floor: [0.003, 0.0034, 0.0042],
+      moon: { color: 0x9db4ff, irradiance: 1.1 },
+    });
+    this.root.add(this.probes.grid);
     this.atmosphere = new Atmosphere(map, {
       shadows: quality.shadows,
       shadowSize: quality.sunShadowSize,

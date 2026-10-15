@@ -10,10 +10,9 @@ import {
   RenderPass,
   SMAAEffect,
   SMAAPreset,
-  ToneMappingEffect,
-  ToneMappingMode,
   VignetteEffect,
 } from 'postprocessing';
+import { GradeEffect, HdrClampPass, LuminancePass, NEUTRAL_GRADE, type GradeParams } from './GradeEffect';
 import { N8AOPostPass } from 'n8ao';
 import { QUALITY_PRESETS, type QualityPreset } from './quality';
 import { ScreenFxEffect } from './ScreenFxEffect';
@@ -29,6 +28,12 @@ export interface RenderOptions {
   vignette: boolean;
   /** Exposure multiplier applied before tone mapping. */
   exposure: number;
+  /** Bloom intensity multiplier (Glow setting). */
+  glow: number;
+  /** Color grade (map palette x visual style x contrast). */
+  grade: GradeParams;
+  /** Eye adaptation target key; 0 disables adaptation. */
+  adaptKey: number;
 }
 
 export const DEFAULT_RENDER_OPTIONS: RenderOptions = {
@@ -39,6 +44,9 @@ export const DEFAULT_RENDER_OPTIONS: RenderOptions = {
   filmGrain: true,
   vignette: true,
   exposure: 1,
+  glow: 1,
+  grade: NEUTRAL_GRADE,
+  adaptKey: 0.1,
 };
 
 /**
@@ -59,6 +67,8 @@ export class Renderer {
   private aoPass: N8AOPostPass | null = null;
   private motionBlur: MotionBlurEffect | null = null;
   private bloom: BloomEffect | null = null;
+  private grade = new GradeEffect();
+  private lum: LuminancePass | null = null;
   private ca: ChromaticAberrationEffect | null = null;
   private vignette: VignetteEffect | null = null;
   private noise: NoiseEffect | null = null;
@@ -177,19 +187,29 @@ export class Renderer {
       composer.addPass(vm);
     }
 
+    // eye adaptation measures the HDR image; HDR values are clamped so nothing can white out bloom
+    this.lum = null;
+    if (this.options.adaptKey > 0) {
+      this.lum = new LuminancePass();
+      this.lum.key = this.options.adaptKey;
+      composer.addPass(this.lum);
+    }
+    composer.addPass(new HdrClampPass(20));
     const hdrEffects = [];
     if (q.bloom) {
+      // high threshold: only real light sources (HDR emissives > 1) bloom
       this.bloom = new BloomEffect({
-        intensity: 1.15,
-        luminanceThreshold: 0.92,
-        luminanceSmoothing: 0.25,
+        intensity: 0.9 * this.options.glow,
+        luminanceThreshold: 1.0,
+        luminanceSmoothing: 0.35,
         mipmapBlur: true,
-        radius: 0.72,
+        radius: 0.75,
       });
       hdrEffects.push(this.bloom);
     }
-    const tone = new ToneMappingEffect({ mode: ToneMappingMode.ACES_FILMIC });
-    hdrEffects.push(tone);
+    this.grade = new GradeEffect();
+    this.grade.set(this.options.grade, 1);
+    hdrEffects.push(this.grade);
     composer.addPass(new EffectPass(camera, ...hdrEffects));
 
     if (q.aa === 'smaa') composer.addPass(new EffectPass(camera, new SMAAEffect({ preset: SMAAPreset.HIGH })));
@@ -233,7 +253,8 @@ export class Renderer {
   private applyAim(): void {
     const a = this.scoped ? 1 : this.aim;
     const keep = 1 - a;
-    if (this.bloom) this.bloom.intensity = 1.15 * (1 - 0.7 * a);
+    if (this.bloom) this.bloom.intensity = 0.9 * this.options.glow * (1 - 0.7 * a);
+    if (this.lum) this.lum.frozen = this.scoped;
     if (this.ca) this.ca.offset.set(0.0009 * keep, 0.0006 * keep);
     if (this.vignette) this.vignette.darkness = 0.55 * (1 - 0.85 * a);
     if (this.noise) this.noise.blendMode.opacity.value = 0.09 * (1 - 0.9 * a);
@@ -266,6 +287,7 @@ export class Renderer {
     if (!this.enabled || this.contextLost || !this.composer) return;
     this.gl.info.reset();
     this.motionBlur?.updateMatrices();
+    this.grade.set(this.options.grade, (this.lum?.adapted ?? 1) * this.options.exposure);
     this.composer.render(dt);
   }
 

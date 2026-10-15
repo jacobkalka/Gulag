@@ -37,7 +37,7 @@ export function makePlayer(cfg: SimPlayerConfig): PlayerState {
       { id: lo.secondary, mag: getWeapon(lo.secondary).magSize, reserve: getWeapon(lo.secondary).reserve },
     ],
     fireCd: 0, burstLeft: 0, reloadT: 0, reloadTotal: 0, reloadKind: 0, swapT: 0, meleeT: 0, meleeHitDone: true,
-    bloom: 0, shotCount: 0, recoilIdx: 0, lastShotT: -10, prevButtons: 0, spawnProt: 0, sinceHurt: 99, coyoteT: 0, jumpBufT: 0, touchpad: !!cfg.touchpad,
+    bloom: 0, shotCount: 0, recoilIdx: 0, lastShotT: -10, prevButtons: 0, spawnProt: 0, sinceHurt: 99, coyoteT: 0, jumpBufT: 0, touchpad: !!cfg.touchpad, flashlight: false,
     lethals: 1, tacticals: 1, flash: 0, stats: emptyStats(), damageFrom: {}, lastInputSeq: 0, loadout: { ...lo },
     deadT: 0, killedBy: -1, life: 0,
   };
@@ -57,6 +57,7 @@ export function stepPlayerCore(p: PlayerState, inp: PlayerInput, world: Collisio
 
 /** End-of-tick bookkeeping (edge detection state, timers, health regen). */
 export function finishPlayerStep(p: PlayerState, inp: PlayerInput): void {
+  if ((inp.buttons & BTN.FLASHLIGHT) !== 0 && (p.prevButtons & BTN.FLASHLIGHT) === 0) p.flashlight = !p.flashlight;
   p.prevButtons = inp.buttons;
   p.lastInputSeq = inp.seq;
   if (p.spawnProt > 0) p.spawnProt -= DT;
@@ -183,6 +184,7 @@ export class GameSim {
     p.pitch = 0;
     p.alive = p.connected;
     p.hp = HEALTH.max;
+    p.flashlight = false;
     p.crouch = 0;
     p.grounded = true;
     p.slideT = 0;

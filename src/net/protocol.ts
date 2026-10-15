@@ -81,6 +81,7 @@ export interface SnapPlayer {
   sprinting: boolean;
   team: 0 | 1;
   bot: boolean;
+  flashlight: boolean;
   x: number;
   y: number;
   z: number;
@@ -116,7 +117,7 @@ export type SelfState = Pick<
   | 'hp' | 'flash' | 'deadT' | 'coyoteT' | 'jumpBufT'
   | 'shotCount' | 'recoilIdx' | 'prevButtons'
   | 'burstLeft' | 'reloadKind' | 'lethals' | 'tacticals' | 'slot' | 'life'
-  | 'grounded' | 'sprinting' | 'alive' | 'meleeHitDone'
+  | 'grounded' | 'sprinting' | 'alive' | 'meleeHitDone' | 'flashlight'
   | 'mantleFrom' | 'mantleTo' | 'weapons' | 'lastInputSeq'
 >;
 
@@ -164,7 +165,7 @@ export function encodeSnapshot(tick: number, round: RoundState, players: PlayerS
   w.u8(players.length);
   for (const p of players) {
     const flags =
-      (p.alive ? 1 : 0) | (p.connected ? 2 : 0) | (p.grounded ? 4 : 0) | (p.sprinting ? 8 : 0) | (p.team ? 16 : 0) | (p.bot ? 32 : 0);
+      (p.alive ? 1 : 0) | (p.connected ? 2 : 0) | (p.grounded ? 4 : 0) | (p.sprinting ? 8 : 0) | (p.team ? 16 : 0) | (p.bot ? 32 : 0) | (p.flashlight ? 64 : 0);
     w.u8(p.id).u8(flags).f32(p.x).f32(p.y).f32(p.z);
     w.i16(p.vx * 100).i16(p.vy * 100).i16(p.vz * 100);
     w.f32(p.yaw).i16(p.pitch * 10000);
@@ -185,7 +186,7 @@ function writeSelf(w: ByteWriter, p: PlayerState): void {
   for (const k of SELF_F32) w.f32(p[k]);
   for (const k of SELF_U16) w.u16(p[k]);
   for (const k of SELF_U8) w.u8(p[k]);
-  w.u8((p.grounded ? 1 : 0) | (p.sprinting ? 2 : 0) | (p.alive ? 4 : 0) | (p.meleeHitDone ? 8 : 0));
+  w.u8((p.grounded ? 1 : 0) | (p.sprinting ? 2 : 0) | (p.alive ? 4 : 0) | (p.meleeHitDone ? 8 : 0) | (p.flashlight ? 16 : 0));
   for (const v of p.mantleFrom) w.f32(v);
   for (const v of p.mantleTo) w.f32(v);
   for (const wr of p.weapons) w.u8(weaponIndex(wr.id)).u8(wr.mag).u16(wr.reserve);
@@ -203,6 +204,7 @@ function readSelf(r: ByteReader): SelfState {
   s.sprinting = (f & 2) !== 0;
   s.alive = (f & 4) !== 0;
   s.meleeHitDone = (f & 8) !== 0;
+  s.flashlight = (f & 16) !== 0;
   s.mantleFrom = [r.f32(), r.f32(), r.f32()];
   s.mantleTo = [r.f32(), r.f32(), r.f32()];
   s.weapons = [0, 1].map(() => {
@@ -229,6 +231,7 @@ export function applySelf(p: PlayerState, s: SelfState): void {
   p.life = s.life;
   p.grounded = s.grounded;
   p.sprinting = s.sprinting;
+  p.flashlight = s.flashlight;
   p.alive = s.alive;
   p.meleeHitDone = s.meleeHitDone;
   p.mantleFrom = [...s.mantleFrom] as [number, number, number];
@@ -282,7 +285,7 @@ export function decodeSnapshot(r: ByteReader): Snapshot {
     const flash = r.q8(1);
     players.push({
       id, alive: (f & 1) !== 0, connected: (f & 2) !== 0, grounded: (f & 4) !== 0, sprinting: (f & 8) !== 0,
-      team: (f & 16 ? 1 : 0) as 0 | 1, bot: (f & 32) !== 0,
+      team: (f & 16 ? 1 : 0) as 0 | 1, bot: (f & 32) !== 0, flashlight: (f & 64) !== 0,
       x, y, z, vx, vy, vz, yaw, pitch, crouch, ads, hp, slot, weapon, flash,
       slideT: r.q8(2.55), mantleT: r.q8(2.55), reloadT: r.q8(5.1), reloadTotal: r.q8(5.1), meleeT: r.q8(2.55), swapT: r.q8(2.55),
       spawnProt: r.q8(10.2), deadT: r.q8(25.5), killedBy: r.i8(), shotCount: r.u16(),

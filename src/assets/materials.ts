@@ -80,6 +80,11 @@ const DEFS: Record<string, MatDef> = {
 
 export type MaterialName = keyof typeof DEFS;
 
+/** Global specular reflection strength for library (dielectric) materials. */
+export const ENV_SCALE = 0.5;
+/** Mostly metallic materials: no diffuse light, so they keep most of their reflections. */
+const METALLIC = new Set(['chrome', 'darkMetal', 'steelPipe', 'diamond', 'gunSteel', 'gunAlu', 'gunAluTan', 'gunBrass', 'rust']);
+
 export class MaterialLibrary {
   private cache = new Map<string, THREE.Material>();
   private reticles = new Map<string, THREE.MeshBasicMaterial>();
@@ -97,7 +102,9 @@ export class MaterialLibrary {
       color: def.color ?? 0xffffff,
       roughness: def.rough ?? 1,
       metalness: def.metal ?? (def.tex ? 1 : 0),
-      envMapIntensity: def.env ?? 1,
+      // the reflection probe only adds specular now (diffuse IBL is scaled down in the shader);
+      // half strength keeps tiles and paint from glowing in the dark
+      envMapIntensity: (def.env ?? 1) * (METALLIC.has(name) ? 0.9 : ENV_SCALE),
       side: def.side ?? THREE.FrontSide,
       transparent: !!def.transparent,
       opacity: def.opacity ?? 1,

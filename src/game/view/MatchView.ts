@@ -16,6 +16,8 @@ import { Viewmodel } from './Viewmodel';
 import { CharacterView, type RenderPlayer } from './CharacterView';
 import { Effects } from './Effects';
 import { CameraFeel } from './CameraFeel';
+import { Flashlights } from './Flashlights';
+import { gradeOptions } from './lighting/grading';
 import { bakeReflectionProbe } from './ReflectionProbe';
 import { Hud, type ScoreRow } from '@/ui/hud/Hud';
 import { DEG, clamp, damp, wrapAngle } from '@/shared/math';
@@ -88,6 +90,10 @@ export class MatchView {
   private eyeSmooth = MOVE.eyeStand;
   private camRoll = 0;
   private feel = new CameraFeel();
+  private flashlights: Flashlights;
+  private ambUp = new THREE.Color();
+  private ambDown = new THREE.Color();
+  private lastFlashlight = false;
   /** Damage edge flash (decays) and the screen direction it came from. */
   private dmgFlash = 0;
   private dmgDirX = 0;
@@ -132,10 +138,12 @@ export class MatchView {
     this.camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.05, 220);
     this.scene.background = new THREE.Color(0x05070a);
     this.scene.fog = new THREE.FogExp2(0x0b0f14, this.baseFog);
-    this.mapView = new MapView(s.map, o.assets.materials, q, { activeTags: s.rules.mapTags });
+    this.mapView = new MapView(s.map, o.assets.materials, q, { activeTags: s.rules.mapTags, world: s.world });
     this.scene.add(this.mapView.root);
     this.effects = new Effects({ particleScale: q.particleScale, decalLimit: q.decalLimit });
     this.scene.add(this.effects.group);
+    this.flashlights = new Flashlights({ shadowSize: q.spotShadowSize, shadows: q.shadows, remoteLights: q.level === 'low' ? 1 : 2 });
+    this.scene.add(this.flashlights.group);
     this.vm = new Viewmodel(o.assets.materials);
     this.hud = new Hud(o.hudParent);
     for (const d of s.map.decals) if (d.kind === 'puddle') this.puddles.push({ x: d.pos[0], z: d.pos[2], r: Math.min(d.size[0], d.size[1]) * 0.42 });
@@ -148,9 +156,14 @@ export class MatchView {
     }
   }
 
+  get mapId(): string {
+    return this.o.session.map.id;
+  }
+
   /** Bakes the reflection probe and wires the render passes. Call once after construction. */
   init(): void {
     const r = this.o.renderer;
+    r.options = { ...r.options, ...gradeOptions(this.o.session.map.id, settings.value, r.options.quality.level) };
     this.mapView.lights.settle(new THREE.Vector3(0, 1.7, 0), 0);
     this.env = bakeReflectionProbe(r.gl, this.scene, new THREE.Vector3(0, 1.7, 0), r.options.quality.reflectionProbeSize);
     this.o.assets.materials.setEnvMap(this.env);
@@ -239,6 +252,7 @@ export class MatchView {
 
     this.updateAimAssist(dt, local);
     this.updateCamera(dt, local);
+    this.updateFlashlights(dt, local);
     this.updateCharacters(dt, local);
     this.updateViewmodel(dt, local);
     this.updateGrenades();
@@ -946,6 +960,22 @@ export class MatchView {
     }
   }
 
+  private updateFlashlights(dt: number, local: PlayerState | undefined): void {
+    const s = this.o.session;
+    const mine = !!local && local.alive && local.flashlight;
+    if (local && mine !== this.lastFlashlight) audio.play('uiClick', { volume: 0.35 });
+    this.lastFlashlight = mine;
+    this.flashlights.updateLocal(this.camera, mine, dt);
+    const others: { p: PlayerState; eye: THREE.Vector3; yaw: number; pitch: number }[] = [];
+    for (const p of s.players) {
+      if (!p.alive || !p.flashlight || p.id === s.localId) continue;
+      s.renderPose(p.id, this.pose);
+      const eye = new THREE.Vector3(this.pose.x, this.pose.y + MOVE.eyeStand + (MOVE.eyeCrouch - MOVE.eyeStand) * this.pose.crouch - 0.15, this.pose.z);
+      others.push({ p, eye, yaw: this.pose.yaw, pitch: this.pose.pitch });
+    }
+    this.flashlights.updateRemote(others, this.camera);
+  }
+
   private updateViewmodel(dt: number, local: PlayerState | undefined): void {
     if (!local || !local.alive) {
       this.vm.scene.visible = false;
@@ -962,7 +992,13 @@ export class MatchView {
     const scoped = !!w.scope && local.ads > 0.92;
     this.vm.scene.visible = !scoped;
     this.hud.setScope(scoped);
-    this.vm.syncFromWorld(this.camera, this.mapView.lights.nearestActive(this.camera.position, 4), this.env);
+    const vmLights = this.mapView.lights.nearestActive(this.camera.position, 4);
+    if (local.flashlight) vmLights.unshift({ pos: this.flashlights.local.position, color: this.flashlights.local.color, intensity: 0.12, distance: 1.2 });
+    this.vm.syncFromWorld(this.camera, vmLights.slice(0, 4), this.env);
+    this.mapView.probes.sample(this.camera.position, UP, this.ambUp);
+    this.mapView.probes.sample(this.camera.position, DOWN, this.ambDown);
+    // hemisphere irradiance E maps to radiance E/pi; setAmbient multiplies intensity by pi
+    this.vm.setAmbient(this.ambUp.multiplyScalar(1 / Math.PI), this.ambDown.multiplyScalar(1 / Math.PI));
     const look = this.o.input.takeLook();
     this.vm.motionScale = settings.value.reduceMotion ? 0.2 : 1;
     this.vm.update(dt, {
@@ -1149,6 +1185,9 @@ export class MatchView {
     });
   }
 }
+
+const UP = new THREE.Vector3(0, 1, 0);
+const DOWN = new THREE.Vector3(0, -1, 0);
 
 function segPointDist(ax: number, ay: number, az: number, bx: number, by: number, bz: number, px: number, py: number, pz: number): number {
   const dx = bx - ax;

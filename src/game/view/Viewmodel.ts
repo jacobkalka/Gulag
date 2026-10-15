@@ -121,6 +121,10 @@ export class Viewmodel {
     this.armL.shoulder.position.copy(SHOULDER_L);
     this.hemi = new THREE.HemisphereLight(0x7d8aa0, 0x2a2622, 0.2);
     this.scene.add(this.hemi);
+    // over-the-shoulder fill follows the camera
+    this.fill.position.set(-0.6, 1.0, 0.6);
+    this.rig.add(this.fill, this.fill.target);
+    this.fill.target.position.set(0.1, -0.2, -0.5);
     this.flash = new THREE.Sprite(
       new THREE.SpriteMaterial({
         map: radialTexture('rgba(255,240,205,1)', 'rgba(255,130,40,0)', 64),
@@ -159,6 +163,21 @@ export class Viewmodel {
     const pistol = this.weapon.leftHand === 'pistol';
     this.hipPos.set(pistol ? 0.12 : 0.15, pistol ? -0.15 : -0.17, pistol ? -0.34 : -0.38);
   }
+
+  /**
+   * Ambient for the gun from the baked probes at the camera (sky = from above, ground = from
+   * below), plus a soft key from over the shoulder scaled by the same light, so the weapon reads
+   * in the dark without glowing.
+   */
+  setAmbient(up: THREE.Color, down: THREE.Color): void {
+    this.hemi.color.copy(up);
+    this.hemi.groundColor.copy(down);
+    this.hemi.intensity = Math.PI;
+    const lum = Math.max(0.0, (up.r + up.g + up.b) / 3);
+    this.fill.color.copy(up).multiplyScalar(1 / Math.max(1e-4, lum)).lerp(new THREE.Color(1, 1, 1), 0.5);
+    this.fill.intensity = Math.min(2.5, 0.25 + lum * 10);
+  }
+  private fill = new THREE.DirectionalLight(0xffffff, 0.3);
 
   /** Copy world camera transform + sync a few world lights so the gun is lit like the room. */
   syncFromWorld(worldCam: THREE.PerspectiveCamera, lights: { pos: THREE.Vector3; color: THREE.Color; intensity: number; distance: number }[], env: THREE.Texture | null): void {

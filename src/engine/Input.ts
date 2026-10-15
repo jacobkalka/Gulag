@@ -410,6 +410,7 @@ export class Input {
     if (this.isDown('tactical') || gpb(4)) b |= BTN.TACTICAL;
     if (this.isDown('interact')) b |= BTN.INTERACT;
     if (this.isDown('inspect')) b |= BTN.INSPECT;
+    if (this.isDown('flashlight') || gpb(12)) b |= BTN.FLASHLIGHT;
     if (b & BTN.FIRE) this.sprintLatched = false;
     this.wheelPulse.clear();
     return b;

@@ -20,6 +20,7 @@ export const BTN = {
   TACTICAL: 512,
   INTERACT: 1024,
   INSPECT: 2048,
+  FLASHLIGHT: 4096,
 } as const;
 
 export interface PlayerInput {
@@ -121,6 +122,8 @@ export interface PlayerState {
   jumpBufT: number;
   /** Player declared touchpad input mode (host applies the touchpad tuning from weapons.ts). */
   touchpad: boolean;
+  /** Weapon-mounted flashlight on (toggled with the flashlight key; seen by everyone). */
+  flashlight: boolean;
   lethals: number;
   tacticals: number;
   flash: number;

@@ -10,6 +10,8 @@ import { bakeReflectionProbe } from '@/game/view/ReflectionProbe';
 import { PROPS } from '@/assets/models/props';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { Viewmodel } from '@/game/view/Viewmodel';
+import { gradeOptions } from '@/game/view/lighting/grading';
+import { DEFAULT_SETTINGS } from '@/app/settings';
 
 // Art test views:
 //   #/arttest            – map section + character + weapons under final lighting
@@ -21,7 +23,12 @@ export async function runArtTest(canvas: HTMLCanvasElement): Promise<void> {
   const params = new URLSearchParams(location.hash.split('?')[1] ?? '');
   const ql = (params.get('q') ?? 'high') as QualityLevel;
   const quality = QUALITY_PRESETS[ql] ?? QUALITY_PRESETS.high;
-  const renderer = new Renderer(canvas, { ...DEFAULT_RENDER_OPTIONS, quality });
+  const style = (params.get('style') ?? 'cinematic') as 'cinematic' | 'balanced' | 'natural';
+  const renderer = new Renderer(canvas, {
+    ...DEFAULT_RENDER_OPTIONS,
+    quality,
+    ...gradeOptions('sublevel9', { ...DEFAULT_SETTINGS, quality: ql, visualStyle: style }),
+  });
   const t0 = performance.now();
   const assets = await Assets.create(renderer.gl, quality);
   (window as any).__stats = { texMs: Math.round(performance.now() - t0) };

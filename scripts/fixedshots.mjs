@@ -17,6 +17,7 @@ const MATCH_SHOTS = [
   { name: 'ads-halberd', primary: 'halberd', kind: 'ads' },
   { name: 'hip-halberd', primary: 'halberd', kind: 'hip' },
   { name: 'hurt', primary: 'halberd', kind: 'hurt' },
+  { name: 'dark', primary: 'halberd', kind: 'dark' },
 ];
 
 const browser = await chromium.launch({
@@ -98,6 +99,26 @@ async function matchShot({ name, primary, kind }) {
     await page.waitForTimeout(300);
     await page.screenshot({ path: `${outDir}/${name}-fire2.png`, timeout: 180000 });
     await page.mouse.up({ button: 'left' });
+  } else if (kind === 'dark') {
+    // an enemy 7 m ahead in the corridor; first without lights, then with both flashlights on
+    await page.evaluate(() => {
+      const g = window.__game;
+      const s = g.debug().session;
+      const me = s.players.find((p) => p.id === s.localId);
+      const en = s.players.find((p) => p.id !== s.localId);
+      Object.assign(me, { x: -16, z: -8.2, vx: 0, vz: 0 });
+      g.input.yaw = -Math.PI / 2;
+      g.input.pitch = -0.05;
+      Object.assign(en, { x: -9, z: -8.0, vx: 0, vz: 0, yaw: Math.PI / 2, pitch: -0.05 });
+    });
+    await page.waitForTimeout(1500);
+    await page.screenshot({ path: `${outDir}/${name}-off.png`, timeout: 180000 });
+    await page.evaluate(() => {
+      const s = window.__game.debug().session;
+      for (const p of s.players) p.flashlight = true;
+    });
+    await page.waitForTimeout(1500);
+    await page.screenshot({ path: `${outDir}/${name}-on.png`, timeout: 180000 });
   } else if (kind === 'hurt') {
     // freeze real time so the transient effects can be captured deterministically
     const hurt = (amount, frames, setHp) =>

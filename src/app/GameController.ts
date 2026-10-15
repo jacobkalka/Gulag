@@ -6,6 +6,7 @@ import { audio } from '@/engine/audio/AudioEngine';
 import { Assets } from '@/assets/Assets';
 import { activeBindings, inputSettingsOf, settings } from './settings';
 import { saveInputModePref } from './state';
+import { gradeOptions } from '@/game/view/lighting/grading';
 import { currentSpread } from '@/game/sim/weaponLogic';
 import { getWeapon } from '@/data/weapons';
 import { buildSublevel9 } from '@/game/world/sublevel9';
@@ -69,6 +70,7 @@ export class GameController {
       chromaticAberration: st.chromaticAberration,
       filmGrain: st.filmGrain,
       vignette: st.vignette,
+      ...gradeOptions('sublevel9', st, quality.level),
     });
     this.input = new Input(canvas, activeBindings(st), inputSettingsOf(st));
     this.input.onPauseRequest = () => {
@@ -123,6 +125,7 @@ export class GameController {
       chromaticAberration: s.chromaticAberration,
       filmGrain: s.filmGrain,
       vignette: s.vignette,
+      ...gradeOptions(this.match ? this.match.mapId : 'sublevel9', s, QUALITY_PRESETS[s.quality].level),
     });
     if (this.match) this.match.bindRenderer();
     else if (this.menuScene && this.menuCam) this.renderer.setScenes(this.menuScene, this.menuCam);

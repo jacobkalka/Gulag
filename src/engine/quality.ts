@@ -17,6 +17,8 @@ export interface QualityPreset {
   /** How many fixture spot lights may cast shadows. */
   shadowedSpots: number;
   spotShadowSize: number;
+  /** Shadow maps re-rendered per frame besides moving lights (staggered refresh). */
+  shadowUpdates: number;
   /** Max simultaneously active real-time fixture point lights (rest are baked/emissive). */
   fixtureLights: number;
   ao: 'off' | 'performance' | 'medium' | 'high';
@@ -39,8 +41,9 @@ export const QUALITY_PRESETS: Record<QualityLevel, QualityPreset> = {
     shadows: true,
     sunShadowSize: 1024,
     sunShadowDynamic: false,
-    shadowedSpots: 0,
+    shadowedSpots: 2,
     spotShadowSize: 512,
+    shadowUpdates: 1,
     fixtureLights: 4,
     ao: 'off',
     aoHalfRes: true,
@@ -60,9 +63,10 @@ export const QUALITY_PRESETS: Record<QualityLevel, QualityPreset> = {
     shadows: true,
     sunShadowSize: 2048,
     sunShadowDynamic: false,
-    shadowedSpots: 1,
+    shadowedSpots: 4,
     spotShadowSize: 512,
-    fixtureLights: 8,
+    shadowUpdates: 2,
+    fixtureLights: 6,
     ao: 'performance',
     aoHalfRes: true,
     bloom: true,
@@ -81,9 +85,10 @@ export const QUALITY_PRESETS: Record<QualityLevel, QualityPreset> = {
     shadows: true,
     sunShadowSize: 2048,
     sunShadowDynamic: true,
-    shadowedSpots: 2,
+    shadowedSpots: 6,
     spotShadowSize: 1024,
-    fixtureLights: 12,
+    shadowUpdates: 3,
+    fixtureLights: 10,
     ao: 'medium',
     aoHalfRes: true,
     bloom: true,
@@ -102,9 +107,10 @@ export const QUALITY_PRESETS: Record<QualityLevel, QualityPreset> = {
     shadows: true,
     sunShadowSize: 4096,
     sunShadowDynamic: true,
-    shadowedSpots: 4,
+    shadowedSpots: 8,
     spotShadowSize: 1024,
-    fixtureLights: 16,
+    shadowUpdates: 4,
+    fixtureLights: 14,
     ao: 'high',
     aoHalfRes: false,
     bloom: true,

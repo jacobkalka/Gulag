@@ -204,6 +204,55 @@ const SODIUM = 0xffa860;
 const COOL = 0xcfe6ff;
 const TEAM_A = 0xff6a1a;
 
+/**
+ * Mood pass over the fixtures: sickly green fluorescents, warm tungsten cages, sodium pendants
+ * swinging on chains with dust cones, dead and dying fixtures, red emergency accents.
+ */
+function restyleLights(lights: LightDef[]): void {
+  lights.forEach((l, i) => {
+    switch (l.fixture) {
+      case 'tube':
+        l.color = 0xe4fbe9;
+        l.intensity *= 0.6;
+        l.distance = Math.min(l.distance, 8.5);
+        break;
+      case 'tubeBroken':
+        l.color = 0xe4fbe9;
+        l.broken = true;
+        l.flicker = l.flicker || 15;
+        break;
+      case 'cage':
+        l.kelvin = 3300;
+        l.intensity *= 0.7;
+        l.distance = Math.min(l.distance, 7.5);
+        l.shadow = true;
+        // every third cell light is dead
+        if (l.priority === 0 && i % 3 === 0) l.broken = true;
+        break;
+      case 'pendant':
+        l.kelvin = 2900;
+        l.intensity *= 0.8;
+        l.cone = true;
+        l.angle = 0.8;
+        l.shadow = true;
+        if (i % 2 === 0) l.swing = 0.1;
+        break;
+      case 'emergency':
+        if (l.color === 0xff2a12) l.intensity *= 0.9;
+        break;
+      case 'none':
+        // furnace mouths: a warm fire glow, not a saturated orange flood
+        if (l.color === 0xff6a1c) {
+          l.color = 0xff9a5c;
+          l.intensity *= 0.8;
+        }
+        break;
+      default:
+        break;
+    }
+  });
+}
+
 export function buildSublevel9(): MapDef {
   const b = new Builder();
 
@@ -471,6 +520,8 @@ export function buildSublevel9(): MapDef {
     { pos: [-22, 1.7, 0], min: [-25, 0, -17], max: [-19, 4, 17] },
     { pos: [22, 1.7, 0], min: [19, 0, -17], max: [25, 4, 17] },
   ];
+
+  restyleLights(b.lights);
 
   return {
     id: 'sublevel9',

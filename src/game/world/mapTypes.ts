@@ -50,7 +50,20 @@ export interface PropPlacement {
   tag?: string;
 }
 
-export type FixtureType = 'cage' | 'tube' | 'tubeBroken' | 'pendant' | 'flood' | 'emergency' | 'furnace' | 'none';
+export type FixtureType =
+  | 'cage'
+  | 'tube'
+  | 'tubeBroken'
+  | 'pendant'
+  | 'flood'
+  | 'emergency'
+  | 'furnace'
+  | 'lantern'
+  | 'lamppost'
+  | 'searchlight'
+  | 'beacon'
+  | 'window'
+  | 'none';
 
 export interface LightDef {
   pos: V3;
@@ -67,6 +80,20 @@ export interface LightDef {
   priority?: number;
   /** Fixture yaw. */
   rot?: number;
+  /** Color temperature in kelvin; overrides `color` (red/colored lights keep `color`). */
+  kelvin?: number;
+  /** Pendulum swing amplitude (radians) for lamps hanging on chains. */
+  swing?: number;
+  /** Dead fixture: no light at all (or only a faint stutter if `flicker` is set). */
+  broken?: boolean;
+  /** Spot direction for floodlights / searchlights (defaults to straight down). */
+  dir?: V3;
+  /** Spot cone half-angle (radians) for directional fixtures. */
+  angle?: number;
+  /** Draw a fake volumetric cone under the light (dust, steam, rain, snow). */
+  cone?: boolean;
+  /** Searchlights / beacons: rotation speed (radians per second). */
+  spin?: number;
 }
 
 export interface DecalDef {

@@ -123,6 +123,18 @@ export function SettingsPanel(props: { game: GameController; compact?: boolean }
               />
               <p class="hint">Texture resolution changes apply after reloading the page.</p>
               <Slider label="Brightness" value={s.brightness} min={0.6} max={1.6} step={0.02} onInput={(v) => set({ brightness: v })} format={(v) => `${Math.round(v * 100)}%`} hint="Raise it if dark corners are hard to see into" />
+              <Segmented
+                label="Visual style"
+                value={s.visualStyle}
+                options={[
+                  { value: 'cinematic', label: 'CINEMATIC' },
+                  { value: 'balanced', label: 'BALANCED' },
+                  { value: 'natural', label: 'NATURAL' },
+                ]}
+                onChange={(v) => set({ visualStyle: v }, 'video')}
+              />
+              <Slider label="Glow / bloom" value={s.glow} min={0} max={2} step={0.05} onInput={(v) => set({ glow: v }, 'video')} format={(v) => `${Math.round(v * 100)}%`} />
+              <Slider label="Contrast" value={s.contrast} min={0.6} max={1.5} step={0.02} onInput={(v) => set({ contrast: v }, 'video')} format={(v) => `${Math.round(v * 100)}%`} />
               <Slider label="Resolution scale" value={s.resolutionScale} min={0.5} max={1} step={0.05} onInput={(v) => set({ resolutionScale: v }, 'video')} format={(v) => `${Math.round(v * 100)}%`} />
               <Toggle label="Motion blur" value={s.motionBlur} onChange={(v) => set({ motionBlur: v }, 'video')} />
               <Toggle label="Chromatic aberration" value={s.chromaticAberration} onChange={(v) => set({ chromaticAberration: v }, 'video')} />

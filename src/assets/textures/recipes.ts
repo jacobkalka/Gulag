@@ -376,7 +376,7 @@ void surface(vec2 uv, out vec3 albedo, out float height, out float rough, out fl
   rough = mix(0.42 + brushed * 0.1, 0.3, sc * 0.4 + edgeWear * 0.3);
   ao = 1.0;
   // Anodized finish behaves mostly like a dark dielectric; bare scratches are metal.
-  metal = mix(0.35, 1.0, sat(sc + edgeWear));
+  metal = mix(0.18, 1.0, sat(sc + edgeWear));
 }`;
 
 const fabricCamo = /* glsl */ `
@@ -490,7 +490,7 @@ export const RECIPES: TextureRecipe[] = [
   { id: 'plasterGreen', tileMeters: 2.5, hero: false, normalStrength: 1.5, colors: [[58, 86, 72], [120, 116, 108]], seed: 9, glsl: plasterPaint },
   { id: 'wood', tileMeters: 1, hero: false, normalStrength: 2.0, colors: [[150, 112, 72], [96, 66, 40]], params: [0.6, 0, 0, 0], glsl: woodPlanks },
   { id: 'hazard', tileMeters: 1, hero: false, normalStrength: 1.2, colors: [[110, 110, 112]], params: [1, 0, 0, 0], glsl: hazard },
-  { id: 'gunSteel', tileMeters: 0.25, hero: true, normalStrength: 1.0, colors: [[46, 47, 50]], params: [0.85, 0, 0, 0], glsl: gunSteel },
+  { id: 'gunSteel', tileMeters: 0.25, hero: true, normalStrength: 1.0, colors: [[52, 53, 56]], params: [0.25, 0, 0, 0], glsl: gunSteel },
   { id: 'gunPolymer', tileMeters: 0.15, hero: true, normalStrength: 1.5, colors: [[30, 31, 33]], params: [90, 0.3, 0, 0], glsl: gunPolymer },
   { id: 'gunPolymerTan', tileMeters: 0.15, hero: false, normalStrength: 1.5, colors: [[150, 124, 92]], params: [90, 0.3, 0, 0], seed: 3, glsl: gunPolymer },
   { id: 'gunGrip', tileMeters: 0.08, hero: false, normalStrength: 2.5, colors: [[28, 29, 31]], params: [60, 1.0, 0, 0], seed: 5, glsl: gunPolymer },

@@ -130,10 +130,10 @@ export class Atmosphere {
     const hc = new THREE.Vector3((hole.min[0] + hole.max[0]) / 2, hole.min[1], (hole.min[2] + hole.max[2]) / 2);
     const holeR = Math.hypot(hole.max[0] - hole.min[0], hole.max[2] - hole.min[2]) / 2;
     const dist = 45;
-    const moon = new THREE.SpotLight(0xa9c2ff, 0, dist + 20, Math.atan((holeR * 1.25) / dist), 0.15, 0);
+    const moon = new THREE.SpotLight(0xc4cee4, 0, dist + 20, Math.atan((holeR * 1.25) / dist), 0.15, 0);
     moon.position.copy(hc).addScaledVector(md, -dist);
     moon.target.position.copy(hc).addScaledVector(md, hc.y / -md.y);
-    moon.intensity = 7.0;
+    moon.intensity = 2.6;
     moon.castShadow = opts.shadows;
     moon.shadow.mapSize.set(opts.shadowSize, opts.shadowSize);
     moon.shadow.camera.near = dist - 8;
@@ -144,7 +144,8 @@ export class Atmosphere {
     this.group.add(moon.target);
     this.moon = moon;
 
-    this.hemi = new THREE.HemisphereLight(0x5a6c8c, 0x2a2420, 0.05);
+    // no flat sky fill indoors: ambient comes from the baked probes
+    this.hemi = new THREE.HemisphereLight(0x5a6c8c, 0x2a2420, 0.0);
     this.group.add(this.hemi);
 
     if (opts.lightShafts) {
