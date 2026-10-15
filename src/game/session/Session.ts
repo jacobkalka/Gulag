@@ -39,6 +39,8 @@ export interface MatchSession {
   /** Fractional host tick at which remote players are being rendered (for lag compensation). */
   viewTick(): number;
   setLoadout(l: Loadout): void;
+  /** Declares the local player's input mode (touchpad tuning is applied by the host). */
+  setTouchpad(on: boolean): void;
   /** Round-trip time in ms (0 for local). */
   ping(): number;
   /** Network round trip of any player (scoreboard), when known. */

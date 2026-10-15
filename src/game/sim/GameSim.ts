@@ -1,8 +1,9 @@
 import type { MapDef } from '@/game/world/mapTypes';
 import { CollisionWorld, OPAQUE } from '@/game/world/collision';
 import type { MatchRules } from '@/data/playlists';
-import { damageAt, getWeapon, hitboxMultiplier, type Hitbox } from '@/data/weapons';
+import { damageAt, getWeapon, hitboxMultiplier, touchpadForgiveness, type Hitbox } from '@/data/weapons';
 import { DEFAULT_LOADOUT, type Loadout } from '@/data/progression';
+import { HEALTH, regenAmount } from '@/data/gameplay';
 import { Rng } from '@/shared/rng';
 import { DT, TICK_RATE, BTN, emptyStats, type GameEvent, type GrenadeState, type PlayerInput, type PlayerState, type RoundState, type ShotTrace } from './types';
 import { MOVE, eyeHeight, stepMovement } from './movement';
@@ -15,6 +16,8 @@ export interface SimPlayerConfig {
   name: string;
   bot: boolean;
   loadout?: Loadout;
+  /** Touchpad input mode (lower hip spread, hit forgiveness). */
+  touchpad?: boolean;
 }
 
 export const MAX_RANGE = 160;
@@ -25,7 +28,7 @@ const MELEE_BACKSTAB = 120;
 export function makePlayer(cfg: SimPlayerConfig): PlayerState {
   const lo = cfg.loadout ?? DEFAULT_LOADOUT;
   return {
-    id: cfg.id, team: cfg.team, name: cfg.name, bot: cfg.bot, connected: true, alive: false, hp: 100,
+    id: cfg.id, team: cfg.team, name: cfg.name, bot: cfg.bot, connected: true, alive: false, hp: HEALTH.max,
     x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, yaw: 0, pitch: 0, crouch: 0, grounded: true,
     slideT: 0, slideCd: 0, mantleT: 0, mantleFrom: [0, 0, 0], mantleTo: [0, 0, 0],
     sprinting: false, sprintBlend: 0, ads: 0, slot: 0,
@@ -34,7 +37,7 @@ export function makePlayer(cfg: SimPlayerConfig): PlayerState {
       { id: lo.secondary, mag: getWeapon(lo.secondary).magSize, reserve: getWeapon(lo.secondary).reserve },
     ],
     fireCd: 0, burstLeft: 0, reloadT: 0, reloadTotal: 0, reloadKind: 0, swapT: 0, meleeT: 0, meleeHitDone: true,
-    bloom: 0, shotCount: 0, recoilIdx: 0, lastShotT: -10, prevButtons: 0, spawnProt: 0, sinceHurt: 99,
+    bloom: 0, shotCount: 0, recoilIdx: 0, lastShotT: -10, prevButtons: 0, spawnProt: 0, sinceHurt: 99, coyoteT: 0, jumpBufT: 0, touchpad: !!cfg.touchpad,
     lethals: 1, tacticals: 1, flash: 0, stats: emptyStats(), damageFrom: {}, lastInputSeq: 0, loadout: { ...lo },
     deadT: 0, killedBy: -1, life: 0,
   };
@@ -53,13 +56,13 @@ export function stepPlayerCore(p: PlayerState, inp: PlayerInput, world: Collisio
 }
 
 /** End-of-tick bookkeeping (edge detection state, timers, health regen). */
-export function finishPlayerStep(p: PlayerState, inp: PlayerInput, rules: MatchRules): void {
+export function finishPlayerStep(p: PlayerState, inp: PlayerInput): void {
   p.prevButtons = inp.buttons;
   p.lastInputSeq = inp.seq;
   if (p.spawnProt > 0) p.spawnProt -= DT;
   if (p.flash > 0) p.flash = Math.max(0, p.flash - DT / 2.6);
   p.sinceHurt += DT;
-  if (p.sinceHurt > rules.regenDelay && p.hp < 100) p.hp = Math.min(100, p.hp + rules.regenRate * DT);
+  if (p.alive && p.hp < HEALTH.max) p.hp = Math.min(HEALTH.max, p.hp + regenAmount(p.sinceHurt, DT));
 }
 
 export function isFrozen(phase: RoundState['phase']): boolean {
@@ -179,7 +182,7 @@ export class GameSim {
     p.yaw = s.yaw;
     p.pitch = 0;
     p.alive = p.connected;
-    p.hp = 100;
+    p.hp = HEALTH.max;
     p.crouch = 0;
     p.grounded = true;
     p.slideT = 0;
@@ -292,7 +295,7 @@ export class GameSim {
       if (fire) this.resolveShot(p, fire);
       this.stepMelee(p);
       if (combat && p.meleeT <= 0 && p.swapT <= 0) this.tryThrow(p, inp);
-      finishPlayerStep(p, inp, this.rules);
+      finishPlayerStep(p, inp);
     }
     this.separatePlayers();
     this.stepGrenades();
@@ -415,6 +418,7 @@ export class GameSim {
     const dmgBy = new Map<number, { amount: number; hitbox: Hitbox; x: number; y: number; z: number; head: boolean }>();
     const pose: BodyPose = { x: 0, y: 0, z: 0, crouch: 0, slide: false, yaw: 0 };
     let anyHit = false;
+    const inflate = p.touchpad ? touchpadForgiveness() : 0;
     for (let k = 0; k < pellets; k++) {
       const [dx, dy, dz] = spreadDirection(f.yaw, f.pitch, f.spread, f.seed, k, w.pelletSpread ?? 0);
       const wall = this.world.raycast(ox, oy, oz, dx, dy, dz, MAX_RANGE, OPAQUE);
@@ -426,7 +430,7 @@ export class GameSim {
         if (t.team === p.team && !this.rules.friendlyFire) continue;
         if (!this.targetPose(t, f.viewTick, pose)) continue;
         if (!t.alive) continue;
-        const h = rayVsBody(ox, oy, oz, dx, dy, dz, maxT, pose);
+        const h = rayVsBody(ox, oy, oz, dx, dy, dz, maxT, pose, inflate);
         if (h && h.t < maxT) {
           maxT = h.t;
           victim = t;

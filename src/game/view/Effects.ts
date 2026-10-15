@@ -1,4 +1,7 @@
 import * as THREE from 'three';
+import { LineSegments2 } from 'three/examples/jsm/lines/LineSegments2.js';
+import { LineSegmentsGeometry } from 'three/examples/jsm/lines/LineSegmentsGeometry.js';
+import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import { radialTexture } from '@/assets/textures/canvasTextures';
 import type { Surface } from '@/game/world/mapTypes';
 
@@ -128,8 +131,20 @@ class ParticlePool {
   }
 }
 
+/** Tracer look: a thin hot core (screen-space width) with a short fading streak. */
+const TRACER = {
+  /** Visual speed of the round (m/s); real tracers are faster, this keeps a few frames visible. */
+  speed: 520,
+  /** Streak length behind the head (m). */
+  length: 1.3,
+  /** Core width in CSS pixels. */
+  widthPx: 1.6,
+  /** HDR head color (kept modest: the bloom is clamped and must not blow out). */
+  head: [2.1, 0.95, 0.38] as const,
+  max: 48,
+};
+
 interface Tracer {
-  mesh: THREE.Mesh;
   ox: number;
   oy: number;
   oz: number;
@@ -139,6 +154,8 @@ interface Tracer {
   len: number;
   t: number;
   active: boolean;
+  /** Brightness multiplier (remote shots read a little brighter so you can find the shooter). */
+  gain: number;
 }
 
 interface Flash {
@@ -179,6 +196,11 @@ export class Effects {
   private add: ParticlePool;
   private alpha: ParticlePool;
   private tracers: Tracer[] = [];
+  private tracerLines: LineSegments2;
+  private tracerGeo: LineSegmentsGeometry;
+  private tracerMat: LineMaterial;
+  private tracerPos: Float32Array;
+  private tracerCol: Float32Array;
   private flashes: Flash[] = [];
   private flashLights: { light: THREE.PointLight; t: number }[] = [];
   private holes: THREE.InstancedMesh;
@@ -196,21 +218,23 @@ export class Effects {
     this.add = new ParticlePool(Math.floor(700 * Math.max(0.4, opts.particleScale)), true);
     this.alpha = new ParticlePool(Math.floor(600 * Math.max(0.4, opts.particleScale)), false);
     this.group.add(this.add.points, this.alpha.points);
-    const tracerGeo = new THREE.CylinderGeometry(1, 1, 1, 6, 1, true);
-    tracerGeo.rotateX(Math.PI / 2);
-    // warm and only mildly HDR: a hint of bloom without turning into white sticks
-    const tracerMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.0, 0.7, 0.36).multiplyScalar(2.4), blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, opacity: 0.8 });
-    for (let i = 0; i < 48; i++) {
-      const mesh = new THREE.Mesh(tracerGeo, tracerMat);
-      mesh.visible = false;
-      mesh.frustumCulled = false;
-      mesh.renderOrder = 9;
-      this.group.add(mesh);
-      this.tracers.push({ mesh, ox: 0, oy: 0, oz: 0, dx: 0, dy: 0, dz: 0, len: 0, t: 0, active: false });
-    }
+    // Tracers: one batched set of screen-space line segments (constant pixel width, so a round
+    // passing near the camera is still a hairline, not a glowing stick).
+    this.tracerPos = new Float32Array(TRACER.max * 6);
+    this.tracerCol = new Float32Array(TRACER.max * 6);
+    this.tracerGeo = new LineSegmentsGeometry();
+    this.tracerGeo.setPositions(this.tracerPos);
+    this.tracerGeo.setColors(this.tracerCol);
+    this.tracerMat = new LineMaterial({ linewidth: TRACER.widthPx, vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, worldUnits: false });
+    this.tracerMat.toneMapped = false;
+    this.tracerLines = new LineSegments2(this.tracerGeo, this.tracerMat);
+    this.tracerLines.frustumCulled = false;
+    this.tracerLines.renderOrder = 9;
+    this.group.add(this.tracerLines);
+    for (let i = 0; i < TRACER.max; i++) this.tracers.push({ ox: 0, oy: 0, oz: 0, dx: 0, dy: 0, dz: 0, len: 0, t: 0, active: false, gain: 1 });
     this.flashMat = new THREE.SpriteMaterial({
       map: radialTexture('rgba(255,236,190,1)', 'rgba(255,120,30,0)', 64),
-      color: new THREE.Color(1, 0.8, 0.5).multiplyScalar(6),
+      color: new THREE.Color(1, 0.78, 0.48).multiplyScalar(2.6),
       blending: THREE.AdditiveBlending,
       depthWrite: false,
       transparent: true,
@@ -246,43 +270,64 @@ export class Effects {
     this.group.add(this.holes);
   }
 
-  setPixelScale(heightPx: number): void {
+  setPixelScale(heightPx: number, widthPx = heightPx * (16 / 9)): void {
     this.add.setScale(heightPx * 0.9);
     this.alpha.setScale(heightPx * 0.9);
+    this.tracerMat.resolution.set(widthPx, heightPx);
   }
 
-  tracer(ox: number, oy: number, oz: number, ex: number, ey: number, ez: number, width = 0.007): void {
+  /**
+   * A tracer from (ox,oy,oz) toward (ex,ey,ez). `skip` meters at the start are not drawn
+   * (the shooter's own rounds appear downrange instead of crossing the reticle).
+   */
+  tracer(ox: number, oy: number, oz: number, ex: number, ey: number, ez: number, gain = 1, skip = 0): void {
     const len = Math.hypot(ex - ox, ey - oy, ez - oz);
-    if (len < 1.5) return;
+    if (len < skip + 1.5) return;
     const tr = this.tracers.find((t) => !t.active) ?? this.tracers[0];
     tr.active = true;
-    tr.ox = ox;
-    tr.oy = oy;
-    tr.oz = oz;
     tr.dx = (ex - ox) / len;
     tr.dy = (ey - oy) / len;
     tr.dz = (ez - oz) / len;
-    tr.len = len;
+    tr.ox = ox + tr.dx * skip;
+    tr.oy = oy + tr.dy * skip;
+    tr.oz = oz + tr.dz * skip;
+    tr.len = len - skip;
     tr.t = 0;
-    tr.mesh.visible = true;
-    tr.mesh.scale.set(width, width, 1);
+    tr.gain = gain;
   }
 
-  muzzleFlash(x: number, y: number, z: number, size = 0.35, light = true): void {
+  /**
+   * Muzzle flash in the world (other players). Small, brief and clamped: a short light pulse for
+   * the room and a tiny HDR sprite; smoke drifts away from the shooter.
+   */
+  muzzleFlash(x: number, y: number, z: number, size = 0.22, light = true, lightIntensity = 6, smoke = 1): void {
     const f = this.flashes.find((q) => q.t <= 0) ?? this.flashes[0];
-    f.t = 0.05;
+    f.t = 0.035;
     f.sprite.position.set(x, y, z);
     f.sprite.scale.setScalar(size * (0.8 + Math.random() * 0.4));
     f.sprite.material.rotation = Math.random() * Math.PI;
     f.sprite.visible = true;
-    if (light) {
-      const l = this.flashLights.reduce((a, b) => (a.t < b.t ? a : b));
-      l.t = 0.06;
-      l.light.position.set(x, y, z);
-      l.light.intensity = 30;
+    if (light) this.flashLight(x, y, z, lightIntensity, 0.05);
+    const n = Math.round(2 * this.scale * smoke);
+    for (let i = 0; i < n; i++) {
+      this.alpha.emit(x, y, z, (Math.random() - 0.5) * 0.5, 0.15 + Math.random() * 0.35, (Math.random() - 0.5) * 0.5, 0.5 + Math.random() * 0.3, 0.1, 0.45, 0.17, 0.16, 0.15, 0.12, 2.2, -0.2);
     }
-    for (let i = 0; i < 4 * this.scale; i++) {
-      this.alpha.emit(x, y, z, (Math.random() - 0.5) * 0.6, Math.random() * 0.5, (Math.random() - 0.5) * 0.6, 0.6 + Math.random() * 0.4, 0.12, 0.6, 0.18, 0.17, 0.16, 0.18, 2.0, -0.2);
+  }
+
+  /** Short clamped light pulse (muzzle flashes). */
+  flashLight(x: number, y: number, z: number, intensity: number, t = 0.05): void {
+    const l = this.flashLights.reduce((a, b) => (a.t < b.t ? a : b));
+    l.t = t;
+    l.light.position.set(x, y, z);
+    l.light.intensity = Math.min(intensity, 8);
+    l.light.distance = 6;
+  }
+
+  /** Thin smoke wisp leaving the local muzzle, pushed forward so it never hangs in front of the sights. */
+  muzzleSmoke(x: number, y: number, z: number, fx: number, fy: number, fz: number, amount = 1): void {
+    const n = Math.round(1 * this.scale * amount);
+    for (let i = 0; i < n; i++) {
+      this.alpha.emit(x + fx * 0.45, y + fy * 0.45 + 0.03, z + fz * 0.45, fx * 2.2 + (Math.random() - 0.5) * 0.3, 0.2 + Math.random() * 0.2, fz * 2.2 + (Math.random() - 0.5) * 0.3, 0.35, 0.04, 0.3, 0.1, 0.1, 0.09, 0.05, 2.5, -0.25);
     }
   }
 
@@ -305,11 +350,12 @@ export class Effects {
     if (surface === 'water') {
       for (let i = 0; i < n(10); i++) this.alpha.emit(x, y, z, rnd() * 1.5, 2 + Math.random() * 2.5, rnd() * 1.5, 0.5, 0.05, 0.05, 0.6, 0.65, 0.7, 0.5, 1, 9);
     } else {
+      // dust is unlit, so keep it dim: it should read as a puff of grit, not a glowing ball
       const dust: [number, number, number] =
-        surface === 'wood' ? [0.42, 0.32, 0.2] : surface === 'tile' ? [0.82, 0.8, 0.76] : surface === 'metal' ? [0.3, 0.3, 0.3] : [0.52, 0.5, 0.47];
-      for (let i = 0; i < n(7); i++) {
+        surface === 'wood' ? [0.2, 0.15, 0.1] : surface === 'tile' ? [0.32, 0.31, 0.29] : surface === 'metal' ? [0.14, 0.14, 0.14] : [0.24, 0.23, 0.21];
+      for (let i = 0; i < n(6); i++) {
         const sp = 0.6 + Math.random() * 1.6;
-        this.alpha.emit(x + nx * 0.03, y + ny * 0.03, z + nz * 0.03, (nx + rnd() * 0.8) * sp, (ny + rnd() * 0.8) * sp + 0.2, (nz + rnd() * 0.8) * sp, 0.6 + Math.random() * 0.6, 0.12, 0.55, dust[0], dust[1], dust[2], 0.45, 3.5, 0.6);
+        this.alpha.emit(x + nx * 0.03, y + ny * 0.03, z + nz * 0.03, (nx + rnd() * 0.8) * sp, (ny + rnd() * 0.8) * sp + 0.2, (nz + rnd() * 0.8) * sp, 0.55 + Math.random() * 0.5, 0.09, 0.45, dust[0], dust[1], dust[2], 0.32, 3.5, 0.6);
       }
       // chips
       for (let i = 0; i < n(4); i++) {
@@ -342,6 +388,7 @@ export class Effects {
     l.t = 0.25;
     l.light.position.set(x, y + 0.3, z);
     l.light.intensity = kind === 'frag' ? 400 : 900;
+    l.light.distance = 14;
     const f = this.flashes.find((q) => q.t <= 0) ?? this.flashes[0];
     f.t = 0.12;
     f.sprite.position.set(x, y + 0.3, z);
@@ -367,21 +414,49 @@ export class Effects {
   update(dt: number): void {
     this.add.update(dt);
     this.alpha.update(dt);
-    for (const tr of this.tracers) {
-      if (!tr.active) continue;
-      tr.t += dt;
-      const head = Math.min(tr.len, tr.t * 420);
-      const tail = Math.max(0, head - 2.6);
-      if (tail >= tr.len - 0.01) {
-        tr.active = false;
-        tr.mesh.visible = false;
-        continue;
+    const P = this.tracerPos;
+    const C = this.tracerCol;
+    for (let i = 0; i < this.tracers.length; i++) {
+      const tr = this.tracers[i];
+      const o = i * 6;
+      if (tr.active) {
+        tr.t += dt;
+        // the streak travels at the visual speed; once it arrives a short stub stays at the end
+        // for a couple of frames, so even a round into a wall a few meters away is seen
+        const tEnd = (tr.len + TRACER.length) / TRACER.speed;
+        const head = Math.min(tr.len, tr.t * TRACER.speed);
+        const tail = Math.max(0, Math.min(head - TRACER.length, tr.len - TRACER.length * 0.5));
+        if (tr.t > tEnd + 0.045) tr.active = false;
+        else {
+          P[o] = tr.ox + tr.dx * tail;
+          P[o + 1] = tr.oy + tr.dy * tail;
+          P[o + 2] = tr.oz + tr.dz * tail;
+          P[o + 3] = tr.ox + tr.dx * head;
+          P[o + 4] = tr.oy + tr.dy * head;
+          P[o + 5] = tr.oz + tr.dz * head;
+          // faint tail, hot head; fades out after arriving
+          const fade = tr.t > tEnd ? Math.max(0, 1 - (tr.t - tEnd) / 0.045) : 1;
+          const g = tr.gain * fade;
+          C[o] = TRACER.head[0] * 0.08 * g;
+          C[o + 1] = TRACER.head[1] * 0.08 * g;
+          C[o + 2] = TRACER.head[2] * 0.08 * g;
+          C[o + 3] = TRACER.head[0] * g;
+          C[o + 4] = TRACER.head[1] * g;
+          C[o + 5] = TRACER.head[2] * g;
+          continue;
+        }
       }
-      const mid = (head + tail) / 2;
-      tr.mesh.position.set(tr.ox + tr.dx * mid, tr.oy + tr.dy * mid, tr.oz + tr.dz * mid);
-      tr.mesh.scale.z = Math.max(0.01, head - tail);
-      tr.mesh.lookAt(tr.mesh.position.x + tr.dx, tr.mesh.position.y + tr.dy, tr.mesh.position.z + tr.dz);
+      for (let k = 0; k < 6; k++) {
+        P[o + k] = 0;
+        C[o + k] = 0;
+      }
     }
+    const ps = this.tracerGeo.getAttribute('instanceStart') as THREE.InterleavedBufferAttribute;
+    const cs = this.tracerGeo.getAttribute('instanceColorStart') as THREE.InterleavedBufferAttribute;
+    (ps.data.array as Float32Array).set(P);
+    ps.data.needsUpdate = true;
+    (cs.data.array as Float32Array).set(C);
+    cs.data.needsUpdate = true;
     for (const f of this.flashes) {
       if (f.t <= 0) continue;
       f.t -= dt;

@@ -73,7 +73,7 @@ export class RoomController {
 
   private me() {
     const p = profile.value;
-    return { name: p.username, level: levelForXp(p.xp).level, loadout: p.loadout };
+    return { name: p.username, level: levelForXp(p.xp).level, loadout: p.loadout, touchpad: settings.value.inputMode === 'touchpad' };
   }
 
   async createRoom(opts: CreateRoomOptions = {}): Promise<void> {
@@ -288,6 +288,11 @@ export class RoomController {
   chat(text: string): void {
     if (this.host) this.host.sendChat(text);
     else this.client?.chat(text);
+  }
+  syncInputMode(): void {
+    const on = settings.value.inputMode === 'touchpad';
+    if (this.host) this.host.setSelfTouchpad(on);
+    else this.client?.setTouchpad(on);
   }
   syncLoadout(): void {
     const l = profile.value.loadout;

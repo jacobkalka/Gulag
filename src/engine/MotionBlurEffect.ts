@@ -37,6 +37,8 @@ export class MotionBlurEffect extends Effect {
   private cur = new THREE.Matrix4();
   private hasPrev = false;
   private lastTime = performance.now();
+  /** 0..1 multiplier (fades out while aiming down sights). */
+  intensity = 1;
 
   constructor(camera: THREE.Camera) {
     super('MotionBlurEffect', fragment, {
@@ -64,7 +66,7 @@ export class MotionBlurEffect extends Effect {
     this.uniforms.get('uPrevViewProj')!.value.copy(this.prev);
     this.uniforms.get('uInvViewProj')!.value.copy(this.cur).invert();
     // Normalize blur to a 1/60 s shutter regardless of the actual frame time.
-    this.uniforms.get('uStrength')!.value = THREE.MathUtils.clamp(1 / 60 / dt, 0.3, 1.5) * 0.55;
+    this.uniforms.get('uStrength')!.value = THREE.MathUtils.clamp(1 / 60 / dt, 0.3, 1.5) * 0.55 * this.intensity;
     this.prev.copy(this.cur);
   }
 }

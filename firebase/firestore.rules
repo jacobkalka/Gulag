@@ -3,7 +3,7 @@ rules_version = '2';
 // LOCKDOWN - Cloud Firestore security rules.
 //
 // Collections
-//   users/{uid}                  public profile, XP, stats, loadout (owner-writable, validated)
+//   users/{uid}                  public profile, XP, stats, loadout, prefs (owner-writable, validated)
 //   users/{uid}/claims/{matchId} one XP claim per match (create-only)
 //   usernames/{lower}            unique username registry -> { uid }
 //   friendCodes/{code}           unique friend code registry -> { uid }
@@ -43,6 +43,14 @@ service cloud.firestore {
       return 1340;
     }
     // </generated:unlocks>
+
+    // Player preferences that follow the account (currently the input mode).
+    function validPrefs(d) {
+      return !('prefs' in d)
+        || (d.prefs is map
+          && d.prefs.keys().hasOnly(['inputMode'])
+          && (!('inputMode' in d.prefs) || d.prefs.inputMode in ['mouse', 'touchpad']));
+    }
 
     function validLoadout(l, xp) {
       return l is map
@@ -138,7 +146,8 @@ service cloud.firestore {
     match /users/{uid} {
       allow read: if signedIn();
       allow create: if isUser(uid)
-        && request.resource.data.keys().hasOnly(['username', 'usernameLower', 'friendCode', 'xp', 'loadout', 'stats', 'createdAt', 'updatedAt', 'lastClaim', 'lastClaimAt'])
+        && request.resource.data.keys().hasOnly(['username', 'usernameLower', 'friendCode', 'xp', 'loadout', 'stats', 'createdAt', 'updatedAt', 'lastClaim', 'lastClaimAt', 'prefs'])
+        && validPrefs(request.resource.data)
         && nameClaimed(uid)
         && getAfter(/databases/$(database)/documents/friendCodes/$(request.resource.data.friendCode)).data.uid == uid
         && request.resource.data.xp == 0
@@ -149,7 +158,8 @@ service cloud.firestore {
         && request.resource.data.lastClaim == ''
         && request.resource.data.lastClaimAt == request.time;
       allow update: if isUser(uid)
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['username', 'usernameLower', 'xp', 'loadout', 'stats', 'updatedAt', 'lastClaim', 'lastClaimAt'])
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['username', 'usernameLower', 'xp', 'loadout', 'stats', 'updatedAt', 'lastClaim', 'lastClaimAt', 'prefs'])
+        && validPrefs(request.resource.data)
         && request.resource.data.updatedAt == request.time
         && (nameUnchanged() || nameClaimed(uid))
         && validLoadout(request.resource.data.loadout, request.resource.data.xp)

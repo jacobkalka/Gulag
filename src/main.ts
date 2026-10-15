@@ -38,9 +38,12 @@ async function boot(): Promise<void> {
   // debug/test hook: UI state signals
   const social = await import('./app/social');
   (window as unknown as { __state: unknown }).__state = { ...state, ...social };
+  (window as unknown as { __settings: unknown }).__settings = await import('./app/settings');
   await game.load((progress, label) => (state.loading.value = { progress, label }));
   render(h(App, { game }), uiRoot);
   state.screen.value = 'lobby';
+  const { maybeShowInputHint } = await import('./ui/inputHint');
+  maybeShowInputHint(game);
   const { initBackend } = await import('./backend/init');
   await initBackend(game).catch((e) => console.warn('backend init failed', e));
 }

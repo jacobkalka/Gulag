@@ -4,6 +4,7 @@ import { buildWeapon, type WeaponModel } from '@/assets/models/weapons';
 import { capsule, cyl, merge, rbox, torus, xf, type Geo } from '@/assets/geometry/toolkit';
 import { GRIPS, leftGrip, solveArm, wristTarget } from '@/assets/models/character';
 import { clamp, damp, lerp } from '@/shared/math';
+import { radialTexture } from '@/assets/textures/canvasTextures';
 
 // First-person viewmodel: gloved arms solved onto the weapon with 2-bone IK, procedural
 // hip / ADS / sprint poses, sway, bob, recoil kick, and reload/swap/inspect animations.
@@ -101,6 +102,12 @@ export class Viewmodel {
   private inspectT = -1;
   boltBack = 0;
   private hipPos = new THREE.Vector3(0.15, -0.17, -0.38);
+  /** Small muzzle flash sprite + light that live with the gun (local player only). */
+  private flash: THREE.Sprite;
+  private flashLight: THREE.PointLight;
+  private flashT = 0;
+  /** Visual recoil multiplier (touchpad mode lowers it). */
+  kickScale = 1;
 
   constructor(private lib: MaterialLibrary, fov = 60) {
     this.camera = new THREE.PerspectiveCamera(fov, 16 / 9, 0.01, 10);
@@ -114,6 +121,19 @@ export class Viewmodel {
     this.armL.shoulder.position.copy(SHOULDER_L);
     this.hemi = new THREE.HemisphereLight(0x7d8aa0, 0x2a2622, 0.2);
     this.scene.add(this.hemi);
+    this.flash = new THREE.Sprite(
+      new THREE.SpriteMaterial({
+        map: radialTexture('rgba(255,240,205,1)', 'rgba(255,130,40,0)', 64),
+        color: new THREE.Color(1, 0.8, 0.52).multiplyScalar(2.2),
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        transparent: true,
+        toneMapped: true,
+      }),
+    );
+    this.flash.visible = false;
+    this.flash.renderOrder = 5;
+    this.flashLight = new THREE.PointLight(0xffb26a, 0, 1.2, 2);
     for (let i = 0; i < 4; i++) {
       const l = new THREE.PointLight(0xffffff, 0, 12, 2);
       this.scene.add(l);
@@ -132,6 +152,9 @@ export class Viewmodel {
       if (m.isMesh) m.castShadow = false;
     });
     this.holder.add(this.weapon.root);
+    this.weapon.root.add(this.flash, this.flashLight);
+    this.flash.position.copy(this.weapon.muzzle);
+    this.flashLight.position.copy(this.weapon.muzzle);
     // Pistols sit closer and lower; long guns a little further out.
     const pistol = this.weapon.leftHand === 'pistol';
     this.hipPos.set(pistol ? 0.12 : 0.15, pistol ? -0.15 : -0.17, pistol ? -0.34 : -0.38);
@@ -157,10 +180,21 @@ export class Viewmodel {
   }
 
   fire(strength = 1): void {
-    this.kick = Math.min(1.6, this.kick + 0.55 * strength);
-    this.kickRot = Math.min(1.6, this.kickRot + 0.5 * strength);
-    this.kickSide = (Math.random() - 0.5) * 0.6 * strength;
+    const s = strength * this.kickScale;
+    this.kick = Math.min(1.6, this.kick + 0.55 * s);
+    this.kickRot = Math.min(1.6, this.kickRot + 0.5 * s);
+    this.kickSide = (Math.random() - 0.5) * 0.6 * s;
     this.boltBack = 1;
+  }
+
+  /** Brief, small muzzle flash at the gun; much smaller and dimmer while aiming. */
+  muzzleFlash(ads: number, size = 1): void {
+    this.flashT = 0.035;
+    const k = (1 - 0.65 * ads) * size;
+    this.flash.scale.setScalar((0.075 + Math.random() * 0.03) * k);
+    this.flash.material.rotation = Math.random() * Math.PI;
+    this.flash.material.opacity = 1 - 0.5 * ads;
+    this.flashLight.intensity = 0.9 * (1 - 0.6 * ads);
   }
   reload(duration: number): void {
     this.reloadT = 0;
@@ -187,6 +221,10 @@ export class Viewmodel {
     const bobAmt = Math.min(1, speed / 6) * (1 - st.ads * 0.85) * this.motionScale;
     const bobX = Math.sin(this.bobT) * 0.012 * bobAmt;
     const bobY = -Math.abs(Math.cos(this.bobT)) * 0.012 * bobAmt;
+    // --- muzzle flash lifetime
+    if (this.flashT > 0) this.flashT -= dt;
+    this.flash.visible = this.flashT > 0;
+    if (this.flashT <= 0) this.flashLight.intensity = 0;
     // --- recoil recovery
     this.kick = damp(this.kick, 0, 14, dt);
     this.kickRot = damp(this.kickRot, 0, 11, dt);

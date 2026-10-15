@@ -47,9 +47,9 @@ export function Panel(props: { title?: string; children: ComponentChildren; clas
   );
 }
 
-export function Slider(props: { label: string; value: number; min: number; max: number; step?: number; onInput: (v: number) => void; format?: (v: number) => string }): JSX.Element {
+export function Slider(props: { label: string; value: number; min: number; max: number; step?: number; onInput: (v: number) => void; format?: (v: number) => string; hint?: string }): JSX.Element {
   return (
-    <label class="field slider">
+    <label class="field slider" title={props.hint}>
       <span class="field-l">{props.label}</span>
       <input
         type="range"

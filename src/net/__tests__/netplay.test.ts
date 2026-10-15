@@ -106,6 +106,32 @@ describe('netplay over a simulated network', () => {
     expect(maxCorr).toBeLessThan(0.05);
   });
 
+  for (const latency of [80, 150]) {
+    it(`no rubber-banding at ${latency} ms with the faster movement (sprint, slide, slide-jump, strafe)`, () => {
+      const c = setup({ latency, jitter: latency * 0.15, loss: 0.03 }, false, 11);
+      runUntil(c, () => c.hs.round.phase === 'live', 10);
+      Object.assign(c.hs.sim.player(1)!, { x: 0, y: 0, z: -4.5, vx: 0, vz: 0 });
+      runUntil(c, () => false, 1.2, () => ({}), () => ({ yaw: Math.PI }));
+      let maxCorr = 0;
+      let corrSum = 0;
+      const seqButtons = (i: number) =>
+        (i > 10 && i < 70 ? BTN.SPRINT : 0) | (i >= 40 && i < 52 ? BTN.CROUCH : 0) | (i === 52 ? BTN.JUMP : 0) | (i === 95 ? BTN.JUMP : 0);
+      for (let i = 0; i < 160; i++) {
+        frame(c, () => ({}), () => ({ mz: i < 120 ? 1 : 0, mx: i > 75 && i < 110 ? (i % 30 < 15 ? 1 : -1) : 0, yaw: Math.PI + (i > 110 ? 0.4 : 0), buttons: seqButtons(i) }));
+        maxCorr = Math.max(maxCorr, c.cs.lastCorrection);
+        corrSum += c.cs.lastCorrection;
+      }
+      runUntil(c, () => false, 1.0, () => ({}), () => ({ yaw: Math.PI + 0.4 }));
+      const auth = c.hs.sim.player(1)!;
+      const pred = local(c);
+      expect(Math.hypot(auth.x, auth.z + 4.5)).toBeGreaterThan(5); // it really moved
+      expect(Math.hypot(pred.x - auth.x, pred.z - auth.z)).toBeLessThan(0.01);
+      // corrections stay tiny (lost packets are re-sent redundantly, so prediction matches)
+      expect(maxCorr).toBeLessThan(0.08);
+      expect(corrSum).toBeLessThan(0.5);
+    });
+  }
+
   it('a client flooding inputs cannot move faster than normal', () => {
     const c = setup({ latency: 30, jitter: 0, loss: 0 });
     runUntil(c, () => c.hs.round.phase === 'live', 8);

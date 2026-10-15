@@ -37,6 +37,7 @@ interface Peer {
   name: string;
   level: number;
   loadout: Loadout;
+  touchpad: boolean;
   team: 0 | 1;
   ready: boolean;
   rtt: number;
@@ -47,7 +48,7 @@ interface Peer {
 
 export interface NetHostOptions {
   code: string;
-  self: { pid: string; name: string; level: number; loadout: Loadout };
+  self: { pid: string; name: string; level: number; loadout: Loadout; touchpad?: boolean };
   map: MapDef;
   playlist: PlaylistId;
   difficulty: BotDifficulty;
@@ -124,6 +125,7 @@ export class NetHost {
       name: sanitizeName(m.name),
       level: Math.max(1, Math.min(50, Math.floor(Number(m.level) || 1))),
       loadout: sanitizeLoadout(m.loadout, 50),
+      touchpad: m.touchpad === true,
       team,
       ready: false,
       rtt: 0,
@@ -159,6 +161,12 @@ export class NetHost {
     return c[1] < c[0] ? 1 : 0;
   }
 
+  /** The host player's own input mode. */
+  setSelfTouchpad(on: boolean): void {
+    this.o.self.touchpad = on;
+    if (this.session) this.session.setTouchpad(on);
+  }
+
   /** Puts the host on a team (matchmade rooms). */
   setSelfTeam(team: 0 | 1): void {
     this.selfTeam = team;
@@ -180,6 +188,10 @@ export class NetHost {
       case 'loadout':
         peer.loadout = sanitizeLoadout(m.loadout, 50);
         if (this.session && peer.playerId >= 0) this.session.sim.setLoadout(peer.playerId, peer.loadout);
+        return;
+      case 'mode':
+        peer.touchpad = m.touchpad === true;
+        if (this.session && peer.playerId >= 0) this.session.setPlayerTouchpad(peer.playerId, peer.touchpad);
         return;
       case 'chat': {
         const now = this.now();
@@ -308,8 +320,8 @@ export class NetHost {
     const session = new HostSession({
       map: this.o.map,
       playlist: this.room.playlist,
-      local: { name: this.o.self.name, loadout: this.selfLoadout, team: this.selfTeam },
-      remotes: peers.map((p) => ({ id: p.playerId, name: p.name, team: p.team, loadout: p.loadout })),
+      local: { name: this.o.self.name, loadout: this.selfLoadout, team: this.selfTeam, touchpad: !!this.o.self.touchpad },
+      remotes: peers.map((p) => ({ id: p.playerId, name: p.name, team: p.team, loadout: p.loadout, touchpad: p.touchpad })),
       fillBots: this.room.fillBots,
       difficulty: this.room.difficulty,
       seed,
@@ -347,6 +359,7 @@ export class NetHost {
       team: p.team,
       bot: p.bot,
       loadout: { ...p.loadout },
+      touchpad: p.touchpad,
     }));
   }
 
@@ -362,7 +375,7 @@ export class NetHost {
     if (bot < 0) return;
     peer.team = team;
     peer.playerId = Math.max(...s.players.map((p) => p.id)) + 1;
-    s.addRemote(peer.playerId, peer.name, team, peer.loadout);
+    s.addRemote(peer.playerId, peer.name, team, peer.loadout, peer.touchpad);
     this.refreshMatchPlayers();
     peer.link.sendR({ t: 'start', match: { ...this.match!, tick: s.tick } } satisfies HostMsg);
     this.refreshMembers();

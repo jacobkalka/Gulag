@@ -1,6 +1,6 @@
 import { useState } from 'preact/hooks';
 import type { JSX } from 'preact';
-import { settings, updateSettings, resetSettings, type Settings } from '@/app/settings';
+import { activeBindings, inputModePatch, settings, updateSettings, resetSettings, type Settings } from '@/app/settings';
 import { ACTION_LABELS, keyLabel, type Action } from '@/engine/Input';
 import type { GameController } from '@/app/GameController';
 import { Button, Segmented, Slider, Toggle } from '../components';
@@ -25,11 +25,12 @@ export function SettingsPanel(props: { game: GameController; compact?: boolean }
       g.input.onRebindCapture = null;
       setRebind(null);
       if (code === 'Escape') return;
-      const b = structuredClone(settings.value.bindings);
+      const touchpad = settings.value.inputMode === 'touchpad';
+      const b = structuredClone(activeBindings(settings.value));
       // remove the code from other actions to avoid conflicts
-      for (const k of Object.keys(b) as Action[]) b[k] = b[k].filter((c) => c !== code);
-      b[a] = [code, ...b[a].filter((c) => c !== code)].slice(0, 2);
-      set({ bindings: b }, 'input');
+      for (const k of Object.keys(b) as Action[]) b[k] = (b[k] ?? []).filter((c) => c !== code);
+      b[a] = [code, ...(b[a] ?? []).filter((c) => c !== code)].slice(0, 2);
+      set(touchpad ? { touchpadBindings: b } : { bindings: b }, 'input');
     };
   };
   return (
@@ -45,21 +46,59 @@ export function SettingsPanel(props: { game: GameController; compact?: boolean }
         {tab === 'controls' && (
           <div class="settings-grid">
             <div class="col">
-              <Slider label="Mouse sensitivity" value={s.sensitivity} min={0.2} max={8} step={0.05} onInput={(v) => set({ sensitivity: v }, 'input')} />
+              <Segmented
+                label="Input mode"
+                value={s.inputMode}
+                options={[
+                  { value: 'mouse', label: 'MOUSE' },
+                  { value: 'touchpad', label: 'TOUCHPAD' },
+                ]}
+                onChange={(v) => set(inputModePatch(v), 'input')}
+              />
+              <p class="hint" data-testid="input-mode-hint">
+                {s.inputMode === 'touchpad'
+                  ? 'Touchpad: Space fires, Left Shift aims, E jumps, Q sprints, two-finger scroll swaps. Much tighter hip fire, lighter recoil and gentle aim assist.'
+                  : 'Mouse: raw pointer input, left click fires, right click aims.'}
+              </p>
+              {s.inputMode === 'mouse' ? (
+                <>
+                  <Slider label="Mouse sensitivity" value={s.sensitivity} min={0.2} max={8} step={0.05} onInput={(v) => set({ sensitivity: v }, 'input')} />
+                </>
+              ) : (
+                <>
+                  <Slider label="Touchpad sensitivity" value={s.touchpadSensitivity} min={0.5} max={10} step={0.05} onInput={(v) => set({ touchpadSensitivity: v }, 'input')} />
+                  <Slider label="Touchpad acceleration curve" value={s.touchpadCurve} min={1} max={2} step={0.05} onInput={(v) => set({ touchpadCurve: v }, 'input')} format={(v) => (v <= 1.001 ? 'LINEAR' : v.toFixed(2))} />
+                  <Slider label="Touchpad smoothing" value={s.touchpadSmoothing} min={0} max={0.8} step={0.05} onInput={(v) => set({ touchpadSmoothing: v }, 'input')} format={(v) => `${Math.round(v * 100)}%`} />
+                  <Slider label="Aim assist" value={s.aimAssist} min={0} max={1} step={0.05} onInput={(v) => set({ aimAssist: v }, 'input')} format={(v) => (v === 0 ? 'OFF' : `${Math.round(v * 100)}%`)} />
+                  <Toggle label="Arrow keys turn the view" value={s.arrowLook} onChange={(v) => set({ arrowLook: v }, 'input')} />
+                  {s.arrowLook && <Slider label="Arrow look speed" value={s.arrowLookSpeed} min={40} max={360} step={5} onInput={(v) => set({ arrowLookSpeed: v }, 'input')} format={(v) => `${Math.round(v)}°/s`} />}
+                </>
+              )}
               <Slider label="ADS sensitivity multiplier" value={s.adsSensitivity} min={0.3} max={1.5} step={0.01} onInput={(v) => set({ adsSensitivity: v }, 'input')} />
               <Slider label="Field of view" value={s.fov} min={70} max={115} step={1} onInput={(v) => set({ fov: v })} format={(v) => `${Math.round(v)}°`} />
+              <Segmented
+                label="Aim down sights"
+                value={s.toggleAds ? 'toggle' : 'hold'}
+                options={[
+                  { value: 'hold', label: 'HOLD' },
+                  { value: 'toggle', label: 'TOGGLE' },
+                ]}
+                onChange={(v) => set({ toggleAds: v === 'toggle' }, 'input')}
+              />
               <Toggle label="Invert Y axis" value={s.invertY} onChange={(v) => set({ invertY: v }, 'input')} />
-              <Toggle label="Toggle aim (instead of hold)" value={s.toggleAds} onChange={(v) => set({ toggleAds: v }, 'input')} />
               <Toggle label="Toggle crouch" value={s.toggleCrouch} onChange={(v) => set({ toggleCrouch: v }, 'input')} />
               <Toggle label="Hold to sprint (off = tap)" value={s.holdSprint} onChange={(v) => set({ holdSprint: v }, 'input')} />
+              <Toggle label="Auto sprint" value={s.autoSprint} onChange={(v) => set({ autoSprint: v }, 'input')} hint="Holding forward starts a sprint" />
             </div>
             <div class="col binds">
-              <div class="binds-h">KEY BINDINGS <small>click to rebind · Esc cancels</small></div>
+              <div class="binds-h">
+                {s.inputMode === 'touchpad' ? 'TOUCHPAD KEY BINDINGS' : 'KEY BINDINGS'} <small>click to rebind · Esc cancels</small>
+              </div>
               {(Object.keys(ACTION_LABELS) as Action[]).map((a) => (
                 <div class="bind-row">
                   <span>{ACTION_LABELS[a]}</span>
                   <button class={`bind-key ${rebind === a ? 'listening' : ''}`} onClick={() => startRebind(a)}>
-                    {rebind === a ? 'PRESS A KEY…' : s.bindings[a].map(keyLabel).join(' / ')}
+                    {rebind === a ? 'PRESS A KEY…' : (activeBindings(s)[a] ?? []).map(keyLabel).join(' / ') || '—'}
                   </button>
                 </div>
               ))}
@@ -83,6 +122,7 @@ export function SettingsPanel(props: { game: GameController; compact?: boolean }
                 }}
               />
               <p class="hint">Texture resolution changes apply after reloading the page.</p>
+              <Slider label="Brightness" value={s.brightness} min={0.6} max={1.6} step={0.02} onInput={(v) => set({ brightness: v })} format={(v) => `${Math.round(v * 100)}%`} hint="Raise it if dark corners are hard to see into" />
               <Slider label="Resolution scale" value={s.resolutionScale} min={0.5} max={1} step={0.05} onInput={(v) => set({ resolutionScale: v }, 'video')} format={(v) => `${Math.round(v * 100)}%`} />
               <Toggle label="Motion blur" value={s.motionBlur} onChange={(v) => set({ motionBlur: v }, 'video')} />
               <Toggle label="Chromatic aberration" value={s.chromaticAberration} onChange={(v) => set({ chromaticAberration: v }, 'video')} />
@@ -152,6 +192,7 @@ export function SettingsPanel(props: { game: GameController; compact?: boolean }
                 onChange={(v) => set({ colorblind: v }, 'hud')}
               />
               <Toggle label="Audio cue subtitles" value={s.subtitles} onChange={(v) => set({ subtitles: v })} hint="Captions with direction for gunfire, footsteps, grenades and reloads" />
+              <Slider label="Camera shake" value={s.cameraShake} min={0} max={1} step={0.05} onInput={(v) => set({ cameraShake: v })} format={(v) => `${Math.round(v * 100)}%`} hint="Head bob, landing, flinch when hit, explosions" />
               <Toggle
                 label="Reduce motion"
                 value={s.reduceMotion}

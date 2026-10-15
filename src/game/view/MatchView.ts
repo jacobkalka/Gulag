@@ -4,7 +4,8 @@ import type { Assets } from '@/assets/Assets';
 import type { Input } from '@/engine/Input';
 import { audio } from '@/engine/audio/AudioEngine';
 import { settings, teamColors } from '@/app/settings';
-import { getWeapon } from '@/data/weapons';
+import { INPUT_TUNING, getWeapon } from '@/data/weapons';
+import { HEALTH } from '@/data/gameplay';
 import type { MatchSession, RenderPose } from '@/game/session/Session';
 import { BTN, type GameEvent, type PlayerInput, type PlayerState } from '@/game/sim/types';
 import { eyeHeight, MOVE } from '@/game/sim/movement';
@@ -14,6 +15,7 @@ import { MapView } from './MapView';
 import { Viewmodel } from './Viewmodel';
 import { CharacterView, type RenderPlayer } from './CharacterView';
 import { Effects } from './Effects';
+import { CameraFeel } from './CameraFeel';
 import { bakeReflectionProbe } from './ReflectionProbe';
 import { Hud, type ScoreRow } from '@/ui/hud/Hud';
 import { DEG, clamp, damp, wrapAngle } from '@/shared/math';
@@ -82,10 +84,27 @@ export class MatchView {
   private debtPitch = 0;
   private lastFire = -10;
   private punch = 0;
-  private shake = 0;
   private landDip = 0;
   private eyeSmooth = MOVE.eyeStand;
   private camRoll = 0;
+  private feel = new CameraFeel();
+  /** Damage edge flash (decays) and the screen direction it came from. */
+  private dmgFlash = 0;
+  private dmgDirX = 0;
+  private dmgDirY = 0;
+  private heartT = 0;
+  private breathT = 0;
+  private baseFog = 0.022;
+  // scope sway (hold breath with the sprint key while scoped)
+  private swayT = 0;
+  private swayX = 0;
+  private swayY = 0;
+  private breathHold = 0;
+  private breathSpent = 0;
+  // touchpad aim assist
+  private assistId = -1;
+  private assistYaw = 0;
+  private assistPitch = 0;
   // state
   private spectateId = -1;
   /** Player being spectated from their own eyes (their body is hidden), or -1. */
@@ -112,7 +131,7 @@ export class MatchView {
     const s = o.session;
     this.camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.05, 220);
     this.scene.background = new THREE.Color(0x05070a);
-    this.scene.fog = new THREE.FogExp2(0x0b0f14, 0.022);
+    this.scene.fog = new THREE.FogExp2(0x0b0f14, this.baseFog);
     this.mapView = new MapView(s.map, o.assets.materials, q, { activeTags: s.rules.mapTags });
     this.scene.add(this.mapView.root);
     this.effects = new Effects({ particleScale: q.particleScale, decalLimit: q.decalLimit });
@@ -150,7 +169,8 @@ export class MatchView {
 
   onResize(): void {
     const h = this.o.renderer.canvas.clientHeight || window.innerHeight;
-    this.effects.setPixelScale(h);
+    const w = this.o.renderer.canvas.clientWidth || window.innerWidth;
+    this.effects.setPixelScale(h, w);
     this.mapView.atmosphere.setPixelScale(h);
   }
 
@@ -217,6 +237,7 @@ export class MatchView {
     this.kickPitch -= kp;
     this.kickYaw -= ky;
 
+    this.updateAimAssist(dt, local);
     this.updateCamera(dt, local);
     this.updateCharacters(dt, local);
     this.updateViewmodel(dt, local);
@@ -321,26 +342,40 @@ export class MatchView {
         const w = getWeapon(e.weapon);
         const shooter = s.players.find((p) => p.id === e.shooter);
         if (e.shooter === localId && local) {
+          const tp = local.touchpad ? INPUT_TUNING.touchpad : null;
+          const visual = tp ? tp.visualRecoilMul : 1;
+          this.vm.kickScale = visual;
           this.vm.fire(w.class === 'sniper' || w.class === 'shotgun' ? 1.6 : w.class === 'pistol' ? 0.8 : 1);
           const k = recoilKick(w, local.recoilIdx, (local.id * 7919 + local.shotCount * 104729) >>> 0, local.ads);
-          this.kickPitch += k.pitch;
-          this.kickYaw += k.yaw;
-          this.debtPitch += k.pitch;
+          const climb = tp ? tp.recoilMul : 1;
+          this.kickPitch += k.pitch * climb;
+          this.kickYaw += k.yaw * climb;
+          this.debtPitch += k.pitch * climb;
           this.lastFire = this.time;
-          this.punch = Math.min(1, this.punch + (w.class === 'sniper' ? 1 : 0.35));
+          this.punch = Math.min(1, this.punch + (w.class === 'sniper' ? 1 : 0.35) * visual);
           audio.play(`gun_${w.id}`, { volume: 0.9 });
           if (w.fireMode === 'pump') this.queueSound('pump', 0.32);
           if (w.fireMode === 'bolt') {
             this.queueSound('boltBack', 0.45);
             this.queueSound('boltForward', 0.85);
           }
+          // small flash on the gun, a clamped light pulse for the room, and a wisp of smoke that
+          // drifts forward out of the sight picture (none at all through a scope)
+          const scoped = !!w.scope && local.ads > 0.9;
           const mz = this.vmMuzzleWorld();
-          if (mz && !(w.scope && local.ads > 0.9)) this.effects.muzzleFlash(mz.x, mz.y, mz.z, w.class === 'shotgun' ? 0.45 : 0.32, true);
+          if (mz && !scoped) {
+            this.vm.muzzleFlash(local.ads, w.class === 'shotgun' ? 1.4 : w.class === 'pistol' ? 0.8 : 1);
+            this.effects.flashLight(mz.x, mz.y, mz.z, 2.0 * (1 - 0.6 * local.ads), 0.03);
+            if (local.ads < 0.5) {
+              const f = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion);
+              this.effects.muzzleSmoke(mz.x, mz.y, mz.z, f.x, f.y, f.z, 1 - local.ads * 2);
+            }
+          }
         } else if (shooter) {
           const cv = this.chars.get(e.shooter);
           cv?.fire();
           const mp = this.characterMuzzle(shooter);
-          this.effects.muzzleFlash(mp.x, mp.y, mp.z, 0.4, true);
+          this.effects.muzzleFlash(mp.x, mp.y, mp.z, w.class === 'shotgun' ? 0.3 : 0.22, true, 6);
           const d = Math.hypot(shooter.x - this.camera.position.x, shooter.z - this.camera.position.z);
           const occluded = !s.world.lineOfSight(this.camera.position.x, this.camera.position.y, this.camera.position.z, mp.x, mp.y, mp.z);
           audio.play(`gun_${w.id}`, { pos: mp, volume: 1.0, lowpass: occluded ? 900 : d > 25 ? 3500 : undefined });
@@ -355,12 +390,26 @@ export class MatchView {
         let ox = t.ox;
         let oy = t.oy;
         let oz = t.oz;
+        // the shooter's own rounds: from the muzzle when firing from the hip; from just under the
+        // sight line and only from some distance out while aiming, so they never cross the reticle
+        let skip = 0;
         if (isLocal) {
-          const mz = this.tracerOriginLocal();
-          if (mz) {
-            ox = mz.x;
-            oy = mz.y;
-            oz = mz.z;
+          const ads = local?.ads ?? 0;
+          if (ads > 0.5) {
+            const wpn = getWeapon(t.weapon);
+            const down = new THREE.Vector3(0, -0.07, 0).applyQuaternion(this.camera.quaternion);
+            ox = this.camera.position.x + down.x;
+            oy = this.camera.position.y + down.y;
+            oz = this.camera.position.z + down.z;
+            skip = wpn.scope ? 16 : 5 + 3 * wpn.zoom;
+          } else {
+            const mz = this.tracerOriginLocal();
+            if (mz) {
+              ox = mz.x;
+              oy = mz.y;
+              oz = mz.z;
+            }
+            skip = 1.5;
           }
         } else {
           const sh = s.players.find((p) => p.id === t.shooter);
@@ -372,7 +421,7 @@ export class MatchView {
           }
         }
         const w = getWeapon(t.weapon);
-        if (!e.impactOnly && t.pellet === 0 && (t.shot % w.tracerEvery === 0 || !isLocal)) this.effects.tracer(ox, oy, oz, t.ex, t.ey, t.ez, w.class === 'sniper' ? 0.012 : 0.007);
+        if (!e.impactOnly && t.pellet === 0 && t.shot % Math.max(1, w.tracerEvery) === 0) this.effects.tracer(ox, oy, oz, t.ex, t.ey, t.ez, isLocal ? 0.7 : 1, skip);
         if (t.surface !== 'none') {
           this.effects.impact(t.ex, t.ey, t.ez, t.nx, t.ny, t.nz, t.surface, this.camera.position, t.surface !== 'flesh');
           if (t.pellet % 3 === 0) {
@@ -400,11 +449,27 @@ export class MatchView {
         }
         if (e.victim === localId && local) {
           const att = s.players.find((p) => p.id === e.attacker);
+          const amount = clamp(e.amount / 40, 0.2, 1);
+          let side = 0;
           if (att) {
             const ang = Math.atan2(-(att.x - local.x), -(att.z - local.z));
-            this.hud.damageIndicator(-wrapAngle(ang - this.o.input.yaw));
+            side = wrapAngle(ang - this.o.input.yaw);
+            this.hud.damageIndicator(-side);
+            // screen direction of the attacker (x right, y up) for the edge flash
+            this.dmgDirX = -Math.sin(side);
+            this.dmgDirY = Math.cos(side) * 0.35;
+          } else {
+            this.dmgDirX = 0;
+            this.dmgDirY = 0;
           }
-          this.shake = Math.min(1, this.shake + e.amount / 60);
+          this.dmgFlash = Math.min(1, this.dmgFlash + 0.35 + amount * 0.45);
+          this.feel.flinch(side, amount);
+          // a small real aim flinch (applied to the view the bullets follow), less while aiming
+          if (local.alive) {
+            const k = amount * (1 - 0.6 * local.ads) * this.feel.scale;
+            this.kickPitch += (0.6 + Math.random() * 0.4) * k * DEG;
+            this.kickYaw += (Math.random() - 0.5) * 1.2 * k * DEG;
+          }
           audio.play('hurt', { volume: 0.7 });
         }
         const victim = this.chars.get(e.victim);
@@ -465,12 +530,16 @@ export class MatchView {
       case 'jump': {
         const p = s.players.find((q) => q.id === e.player);
         if (p) audio.play('jump', p.id === localId ? { volume: 0.4 } : { pos: { x: p.x, y: p.y, z: p.z }, volume: 0.5 });
+        if (e.player === localId) this.feel.jump();
         break;
       }
       case 'land': {
         const p = s.players.find((q) => q.id === e.player);
         if (p) audio.play('land', p.id === localId ? { volume: 0.5 } : { pos: { x: p.x, y: p.y, z: p.z }, volume: 0.6 });
-        if (e.player === localId) this.landDip = Math.min(0.12, e.speed * 0.012);
+        if (e.player === localId) {
+          this.landDip = Math.min(0.1, e.speed * 0.01);
+          this.feel.land(e.speed);
+        }
         break;
       }
       case 'grenade': {
@@ -484,7 +553,7 @@ export class MatchView {
         audio.play(e.kind === 'frag' ? 'explosion' : 'flashbang', { pos: { x: e.x, y: e.y, z: e.z }, volume: 1.2 });
         this.cue(e.kind === 'frag' ? 'EXPLOSION' : 'FLASHBANG', e.x, e.z, 'info', 50);
         const d = Math.hypot(e.x - this.camera.position.x, e.y - this.camera.position.y, e.z - this.camera.position.z);
-        this.shake = Math.min(1.5, this.shake + Math.max(0, 1 - d / 14) * (e.kind === 'frag' ? 1.2 : 0.5));
+        this.feel.shake(Math.max(0, 1 - d / 14) * (e.kind === 'frag' ? 1.2 : 0.5));
         break;
       }
       case 'roundStart':
@@ -541,22 +610,46 @@ export class MatchView {
     const aspect = this.camera.aspect;
     const baseV = 2 * Math.atan(Math.tan((st.fov * DEG) / 2) / Math.max(1, aspect)) / DEG;
     this.punch = damp(this.punch, 0, 12, dt);
-    this.shake = damp(this.shake, 0, 5, dt);
     this.landDip = damp(this.landDip, 0, 8, dt);
+    this.dmgFlash = Math.max(0, this.dmgFlash - dt * 1.6);
+    this.feel.scale = clamp(st.cameraShake, 0, 1) * (st.reduceMotion ? 0.25 : 1);
+    const fx = this.o.renderer.screenFx;
+    fx.set('uGamma', clamp(st.brightness, 0.5, 1.8));
+    fx.set('uTime', this.time);
     if (local && local.alive) {
       s.renderPose(local.id, this.pose);
+      const w = getWeapon(local.weapons[local.slot].id);
+      const scoped = !!w.scope && local.ads > 0.92;
       const eye = local.slideT > 0 ? MOVE.eyeSlide : eyeHeight({ ...local, crouch: this.pose.crouch } as PlayerState);
       this.eyeSmooth = damp(this.eyeSmooth, eye, 18, dt);
-      const motion = st.reduceMotion ? 0.15 : 1;
-      const shakeX = (Math.random() - 0.5) * this.shake * 0.04 * motion;
-      const shakeY = (Math.random() - 0.5) * this.shake * 0.04 * motion;
-      this.camera.position.set(this.pose.x, this.pose.y + this.eyeSmooth - this.landDip * motion, this.pose.z);
-      // slide / lean roll
-      const targetRoll = local.slideT > 0 && !st.reduceMotion ? 0.08 : 0;
+      // procedural camera motion (visual only)
+      const fwdX = -Math.sin(input.yaw);
+      const fwdZ = -Math.cos(input.yaw);
+      const rgtX = -fwdZ;
+      const rgtZ = fwdX;
+      this.feel.update({
+        dt,
+        speed: Math.hypot(local.vx, local.vz),
+        strafe: local.vx * rgtX + local.vz * rgtZ,
+        grounded: local.grounded,
+        sprinting: local.sprinting,
+        crouch: local.crouch,
+        sliding: local.slideT > 0,
+        ads: scoped ? 1 : local.ads,
+      });
+      const f = this.feel;
+      const motion = this.feel.scale;
+      this.camera.position.set(
+        this.pose.x + rgtX * f.pos.x,
+        this.pose.y + this.eyeSmooth + f.pos.y - this.landDip * motion,
+        this.pose.z + rgtZ * f.pos.x,
+      );
+      // slide roll + procedural roll
+      const targetRoll = local.slideT > 0 ? 0.075 * Math.min(1, motion * 1.6) : 0;
       this.camRoll = damp(this.camRoll, targetRoll, 10, dt);
-      const pitch = input.pitch + this.punch * 0.012 + shakeY;
-      this.camera.rotation.set(pitch, input.yaw + shakeX, this.camRoll, 'YXZ');
-      const w = getWeapon(local.weapons[local.slot].id);
+      this.updateScopeSway(dt, scoped, local);
+      const pitch = input.pitch + this.punch * 0.012 * (1 - 0.5 * local.ads) + f.rot.pitch;
+      this.camera.rotation.set(pitch, input.yaw + f.rot.yaw, this.camRoll + f.rot.roll, 'YXZ');
       const zoom = 1 + (w.zoom - 1) * local.ads;
       const v = (2 * Math.atan(Math.tan((baseV * DEG) / 2) / zoom)) / DEG;
       if (Math.abs(this.camera.fov - v) > 0.01) {
@@ -565,25 +658,48 @@ export class MatchView {
       }
       this.spectateId = -1;
       this.fpSpectateId = -1;
-      // screen feedback
-      const fx = this.o.renderer.screenFx;
+      // ADS keeps the picture clean: post effects fade, distant haze thins through a scope
+      this.o.renderer.setAim(local.ads, scoped);
+      const fog = this.scene.fog as THREE.FogExp2;
+      fog.density = this.baseFog * (scoped ? 0.5 : 1 - 0.2 * local.ads);
+      // screen feedback: hit flash toward the attacker, low-health pulse + desaturation that
+      // fade as health regenerates
+      const hpFrac = clamp(local.hp / HEALTH.max, 0, 1);
+      const low = clamp((0.5 - hpFrac) / 0.5, 0, 1);
       fx.set('uFlash', Math.pow(clamp(local.flash, 0, 1), 0.7));
-      fx.set('uDesat', local.hp < 40 ? (40 - local.hp) / 55 : 0);
-      fx.set('uPulse', local.hp < 30 ? 1 : 0);
-      fx.set('uDamage', clamp(this.shake * 0.6, 0, 0.8));
+      fx.set('uDesat', clamp((0.65 - hpFrac) / 0.65, 0, 1) * 0.6);
+      fx.set('uLowHp', low * 0.85);
+      fx.set('uDamage', clamp(this.dmgFlash, 0, 0.9));
+      fx.setDamageDir(this.dmgDirX, this.dmgDirY);
       fx.set('uShield', s.round.phase === 'live' && local.spawnProt > 0 ? 0.6 : 0);
-      fx.set('uTime', this.time);
       if (local.flash > 0.5 && this.flashSound <= 0) {
         audio.play('tinnitus', { volume: 0.5 * local.flash });
         this.flashSound = 3;
       }
       this.flashSound -= dt;
+      // heartbeat and labored breathing when badly hurt
+      if (low > 0.35) {
+        this.heartT -= dt;
+        if (this.heartT <= 0) {
+          audio.play('heartbeat', { volume: 0.25 + 0.45 * low });
+          this.heartT = 0.8;
+        }
+        this.breathT -= dt;
+        if (this.breathT <= 0) {
+          audio.play('breath', { volume: 0.2 + 0.3 * low });
+          this.breathT = 2.2;
+        }
+      } else {
+        this.heartT = 0;
+        this.breathT = 0.6;
+      }
     } else {
       this.spectate(dt, local);
-      const fx = this.o.renderer.screenFx;
+      this.o.renderer.setAim(0, false);
+      (this.scene.fog as THREE.FogExp2).density = this.baseFog;
       fx.set('uFlash', 0);
       fx.set('uDesat', 0.35);
-      fx.set('uPulse', 0);
+      fx.set('uLowHp', 0);
       fx.set('uDamage', 0);
       fx.set('uShield', 0);
       if (Math.abs(this.camera.fov - baseV) > 0.01) {
@@ -592,6 +708,105 @@ export class MatchView {
       }
     }
     this.camera.updateMatrixWorld();
+  }
+
+  /**
+   * A slow figure-eight drift while looking through a magnified scope. Holding the sprint key
+   * steadies it for a few seconds. The drift moves the real aim so the reticle never lies.
+   */
+  private updateScopeSway(dt: number, scoped: boolean, local: PlayerState): void {
+    const input = this.o.input;
+    let tx = 0;
+    let ty = 0;
+    if (scoped) {
+      const holding = input.isDown('sprint') && this.breathSpent <= 0;
+      if (holding) {
+        this.breathHold += dt;
+        if (this.breathHold > 4) {
+          this.breathSpent = 2.5;
+          this.breathHold = 0;
+        }
+      } else this.breathHold = Math.max(0, this.breathHold - dt * 2);
+      if (this.breathSpent > 0) this.breathSpent -= dt;
+      const steady = holding ? 0.15 : this.breathSpent > 0 ? 1.7 : 1;
+      const moving = Math.min(1, Math.hypot(local.vx, local.vz) / 3);
+      this.swayT += dt * (0.55 + 0.4 * moving);
+      const amp = (0.0016 + 0.0025 * moving) * steady * (local.crouch > 0.5 ? 0.6 : 1);
+      tx = Math.sin(this.swayT * 1.3) * amp;
+      ty = Math.sin(this.swayT * 2.6) * amp * 0.55;
+    } else {
+      this.breathHold = 0;
+    }
+    // apply only the change so the player's own aim is never pulled away permanently
+    input.yaw += tx - this.swayX;
+    input.pitch = clamp(input.pitch + (ty - this.swayY), -1.47, 1.47);
+    this.swayX = tx;
+    this.swayY = ty;
+  }
+
+  /**
+   * Touchpad aim assist: when the crosshair is near a visible enemy the look speed drops a
+   * little and the view follows a fraction of the target's motion. Never snaps or locks on.
+   */
+  private updateAimAssist(dt: number, local: PlayerState | undefined): void {
+    const input = this.o.input;
+    input.lookScale = 1;
+    const st = settings.value;
+    if (!local || !local.alive || !local.touchpad || st.inputMode !== 'touchpad' || st.aimAssist <= 0) {
+      this.assistId = -1;
+      return;
+    }
+    const s = this.o.session;
+    const eyeY = local.y + eyeHeight(local);
+    let best = -1;
+    let bestScore = Infinity;
+    let bestYaw = 0;
+    let bestPitch = 0;
+    let bestFall = 0;
+    for (const p of s.players) {
+      if (!p.alive || p.team === local.team || !p.connected) continue;
+      s.renderPose(p.id, this.pose);
+      const dx = this.pose.x - local.x;
+      const dz = this.pose.z - local.z;
+      const tyChest = this.pose.y + 1.25 - this.pose.crouch * 0.4;
+      const dist = Math.hypot(dx, dz);
+      if (dist > 45 || dist < 0.5) continue;
+      const yaw = Math.atan2(-dx, -dz);
+      const pitch = Math.atan2(tyChest - eyeY, dist);
+      const dy = wrapAngle(yaw - input.yaw);
+      const dp = pitch - input.pitch;
+      const ang = Math.hypot(dy, dp);
+      // assist cone: about a body width, never less than 2 degrees
+      const cone = Math.max(2 * DEG, Math.atan(0.55 / dist));
+      if (ang > cone * 1.6) continue;
+      if (!s.world.lineOfSight(local.x, eyeY, local.z, this.pose.x, tyChest, this.pose.z)) continue;
+      const score = ang / cone;
+      if (score < bestScore) {
+        bestScore = score;
+        best = p.id;
+        bestYaw = yaw;
+        bestPitch = pitch;
+        bestFall = clamp(1.6 - score, 0, 1);
+      }
+    }
+    const k = clamp(st.aimAssist, 0, 1);
+    if (best < 0) {
+      this.assistId = -1;
+      return;
+    }
+    // slowdown: up to 40% slower look over the target
+    input.lookScale = 1 - 0.4 * k * bestFall;
+    // stickiness: follow part of the target's angular motion since the last frame
+    if (this.assistId === best && dt > 0) {
+      const dYaw = wrapAngle(bestYaw - this.assistYaw);
+      const dPitch = bestPitch - this.assistPitch;
+      const follow = 0.35 * k * bestFall;
+      if (Math.abs(dYaw) < 0.2) input.yaw += dYaw * follow;
+      if (Math.abs(dPitch) < 0.2) input.pitch = clamp(input.pitch + dPitch * follow, -1.47, 1.47);
+    }
+    this.assistId = best;
+    this.assistYaw = bestYaw;
+    this.assistPitch = bestPitch;
   }
 
   private spectate(dt: number, local: PlayerState | undefined): void {

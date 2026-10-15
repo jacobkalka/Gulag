@@ -1,0 +1,557 @@
+[
+ {
+  "id": "warden",
+  "name": "Warden 9",
+  "cls": "pistol",
+  "cells": {
+   "close": {
+    "body": {
+     "shots": 4,
+     "ms": 429
+    },
+    "head": {
+     "shots": 3,
+     "ms": 286
+    }
+   },
+   "mid": {
+    "body": {
+     "shots": 5,
+     "ms": 571
+    },
+    "head": {
+     "shots": 3,
+     "ms": 286
+    }
+   },
+   "long": {
+    "body": {
+     "shots": 5,
+     "ms": 571
+    },
+    "head": {
+     "shots": 4,
+     "ms": 429
+    }
+   }
+  }
+ },
+ {
+  "id": "ironjaw",
+  "name": "Ironjaw .45",
+  "cls": "pistol",
+  "cells": {
+   "close": {
+    "body": {
+     "shots": 2,
+     "ms": 375
+    },
+    "head": {
+     "shots": 2,
+     "ms": 375
+    }
+   },
+   "mid": {
+    "body": {
+     "shots": 2,
+     "ms": 375
+    },
+    "head": {
+     "shots": 2,
+     "ms": 375
+    }
+   },
+   "long": {
+    "body": {
+     "shots": 3,
+     "ms": 750
+    },
+    "head": {
+     "shots": 2,
+     "ms": 375
+    }
+   }
+  }
+ },
+ {
+  "id": "wasp",
+  "name": "Wasp MP",
+  "cls": "pistol",
+  "cells": {
+   "close": {
+    "body": {
+     "shots": 6,
+     "ms": 273
+    },
+    "head": {
+     "shots": 5,
+     "ms": 218
+    }
+   },
+   "mid": {
+    "body": {
+     "shots": 8,
+     "ms": 382
+    },
+    "head": {
+     "shots": 6,
+     "ms": 273
+    }
+   },
+   "long": {
+    "body": {
+     "shots": 8,
+     "ms": 382
+    },
+    "head": {
+     "shots": 6,
+     "ms": 273
+    }
+   }
+  }
+ },
+ {
+  "id": "rook9",
+  "name": "Rook-9",
+  "cls": "smg",
+  "cells": {
+   "close": {
+    "body": {
+     "shots": 5,
+     "ms": 267
+    },
+    "head": {
+     "shots": 4,
+     "ms": 200
+    }
+   },
+   "mid": {
+    "body": {
+     "shots": 6,
+     "ms": 333
+    },
+    "head": {
+     "shots": 5,
+     "ms": 267
+    }
+   },
+   "long": {
+    "body": {
+     "shots": 6,
+     "ms": 333
+    },
+    "head": {
+     "shots": 5,
+     "ms": 267
+    }
+   }
+  }
+ },
+ {
+  "id": "kestrel",
+  "name": "Kestrel PDW",
+  "cls": "smg",
+  "cells": {
+   "close": {
+    "body": {
+     "shots": 4,
+     "ms": 220
+    },
+    "head": {
+     "shots": 3,
+     "ms": 146
+    }
+   },
+   "mid": {
+    "body": {
+     "shots": 5,
+     "ms": 293
+    },
+    "head": {
+     "shots": 4,
+     "ms": 220
+    }
+   },
+   "long": {
+    "body": {
+     "shots": 6,
+     "ms": 366
+    },
+    "head": {
+     "shots": 4,
+     "ms": 220
+    }
+   }
+  }
+ },
+ {
+  "id": "riptide",
+  "name": "Riptide",
+  "cls": "smg",
+  "cells": {
+   "close": {
+    "body": {
+     "shots": 5,
+     "ms": 240
+    },
+    "head": {
+     "shots": 4,
+     "ms": 180
+    }
+   },
+   "mid": {
+    "body": {
+     "shots": 7,
+     "ms": 360
+    },
+    "head": {
+     "shots": 6,
+     "ms": 300
+    }
+   },
+   "long": {
+    "body": {
+     "shots": 7,
+     "ms": 360
+    },
+    "head": {
+     "shots": 6,
+     "ms": 300
+    }
+   }
+  }
+ },
+ {
+  "id": "halberd",
+  "name": "Halberd AR",
+  "cls": "ar",
+  "cells": {
+   "close": {
+    "body": {
+     "shots": 4,
+     "ms": 237
+    },
+    "head": {
+     "shots": 3,
+     "ms": 158
+    }
+   },
+   "mid": {
+    "body": {
+     "shots": 4,
+     "ms": 237
+    },
+    "head": {
+     "shots": 3,
+     "ms": 158
+    }
+   },
+   "long": {
+    "body": {
+     "shots": 5,
+     "ms": 316
+    },
+    "head": {
+     "shots": 4,
+     "ms": 237
+    }
+   }
+  }
+ },
+ {
+  "id": "talon",
+  "name": "Talon AR",
+  "cls": "ar",
+  "cells": {
+   "close": {
+    "body": {
+     "shots": 4,
+     "ms": 209
+    },
+    "head": {
+     "shots": 3,
+     "ms": 140
+    }
+   },
+   "mid": {
+    "body": {
+     "shots": 5,
+     "ms": 279
+    },
+    "head": {
+     "shots": 3,
+     "ms": 140
+    }
+   },
+   "long": {
+    "body": {
+     "shots": 6,
+     "ms": 349
+    },
+    "head": {
+     "shots": 4,
+     "ms": 209
+    }
+   }
+  }
+ },
+ {
+  "id": "cinder",
+  "name": "Cinder Carbine",
+  "cls": "ar",
+  "cells": {
+   "close": {
+    "body": {
+     "shots": 3,
+     "ms": 114
+    },
+    "head": {
+     "shots": 2,
+     "ms": 57
+    }
+   },
+   "mid": {
+    "body": {
+     "shots": 4,
+     "ms": 374
+    },
+    "head": {
+     "shots": 3,
+     "ms": 114
+    }
+   },
+   "long": {
+    "body": {
+     "shots": 4,
+     "ms": 374
+    },
+    "head": {
+     "shots": 3,
+     "ms": 114
+    }
+   }
+  }
+ },
+ {
+  "id": "anvil",
+  "name": "Anvil-30 BR",
+  "cls": "ar",
+  "cells": {
+   "close": {
+    "body": {
+     "shots": 3,
+     "ms": 231
+    },
+    "head": {
+     "shots": 2,
+     "ms": 115
+    }
+   },
+   "mid": {
+    "body": {
+     "shots": 3,
+     "ms": 231
+    },
+    "head": {
+     "shots": 2,
+     "ms": 115
+    }
+   },
+   "long": {
+    "body": {
+     "shots": 3,
+     "ms": 231
+    },
+    "head": {
+     "shots": 2,
+     "ms": 115
+    }
+   }
+  }
+ },
+ {
+  "id": "thresher",
+  "name": "Thresher-12",
+  "cls": "shotgun",
+  "cells": {
+   "close": {
+    "body": {
+     "shots": 2,
+     "ms": 833
+    },
+    "head": {
+     "shots": 3,
+     "ms": 1667
+    }
+   },
+   "mid": {
+    "body": {
+     "shots": 44,
+     "ms": 35833
+    },
+    "head": {
+     "shots": 51,
+     "ms": 41667
+    }
+   },
+   "long": {
+    "body": {
+     "shots": 93,
+     "ms": 76667
+    },
+    "head": {
+     "shots": 95,
+     "ms": 78333
+    }
+   }
+  }
+ },
+ {
+  "id": "cyclone",
+  "name": "Cyclone Auto",
+  "cls": "shotgun",
+  "cells": {
+   "close": {
+    "body": {
+     "shots": 3,
+     "ms": 571
+    },
+    "head": {
+     "shots": 5,
+     "ms": 1143
+    }
+   },
+   "mid": {
+    "body": {
+     "shots": 79,
+     "ms": 22286
+    },
+    "head": {
+     "shots": 97,
+     "ms": 27429
+    }
+   },
+   "long": {
+    "body": {
+     "shots": 160,
+     "ms": 45429
+    },
+    "head": {
+     "shots": 157,
+     "ms": 44571
+    }
+   }
+  }
+ },
+ {
+  "id": "lancet",
+  "name": "Lancet DMR",
+  "cls": "marksman",
+  "cells": {
+   "close": {
+    "body": {
+     "shots": 2,
+     "ms": 200
+    },
+    "head": {
+     "shots": 1,
+     "ms": 0
+    }
+   },
+   "mid": {
+    "body": {
+     "shots": 2,
+     "ms": 200
+    },
+    "head": {
+     "shots": 1,
+     "ms": 0
+    }
+   },
+   "long": {
+    "body": {
+     "shots": 2,
+     "ms": 200
+    },
+    "head": {
+     "shots": 2,
+     "ms": 200
+    }
+   }
+  }
+ },
+ {
+  "id": "vigil",
+  "name": "Vigil .338",
+  "cls": "sniper",
+  "cells": {
+   "close": {
+    "body": {
+     "shots": 1,
+     "ms": 0
+    },
+    "head": {
+     "shots": 1,
+     "ms": 0
+    }
+   },
+   "mid": {
+    "body": {
+     "shots": 1,
+     "ms": 0
+    },
+    "head": {
+     "shots": 1,
+     "ms": 0
+    }
+   },
+   "long": {
+    "body": {
+     "shots": 1,
+     "ms": 0
+    },
+    "head": {
+     "shots": 1,
+     "ms": 0
+    }
+   }
+  }
+ },
+ {
+  "id": "bulwark",
+  "name": "Bulwark LMG",
+  "cls": "lmg",
+  "cells": {
+   "close": {
+    "body": {
+     "shots": 4,
+     "ms": 265
+    },
+    "head": {
+     "shots": 3,
+     "ms": 176
+    }
+   },
+   "mid": {
+    "body": {
+     "shots": 4,
+     "ms": 265
+    },
+    "head": {
+     "shots": 3,
+     "ms": 176
+    }
+   },
+   "long": {
+    "body": {
+     "shots": 4,
+     "ms": 265
+    },
+    "head": {
+     "shots": 3,
+     "ms": 176
+    }
+   }
+  }
+ }
+]

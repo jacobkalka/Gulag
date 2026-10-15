@@ -115,6 +115,12 @@ export interface PlayerState {
   prevButtons: number;
   spawnProt: number;
   sinceHurt: number;
+  /** Seconds left in which a jump still works after walking off a ledge. */
+  coyoteT: number;
+  /** Seconds left in which a jump press made in the air fires on landing. */
+  jumpBufT: number;
+  /** Player declared touchpad input mode (host applies the touchpad tuning from weapons.ts). */
+  touchpad: boolean;
   lethals: number;
   tacticals: number;
   flash: number;

@@ -4,7 +4,10 @@ import { QUALITY_PRESETS } from '@/engine/quality';
 import { Input } from '@/engine/Input';
 import { audio } from '@/engine/audio/AudioEngine';
 import { Assets } from '@/assets/Assets';
-import { settings } from './settings';
+import { activeBindings, inputSettingsOf, settings } from './settings';
+import { saveInputModePref } from './state';
+import { currentSpread } from '@/game/sim/weaponLogic';
+import { getWeapon } from '@/data/weapons';
 import { buildSublevel9 } from '@/game/world/sublevel9';
 import type { MapDef } from '@/game/world/mapTypes';
 import { HostSession } from '@/game/session/HostSession';
@@ -67,7 +70,7 @@ export class GameController {
       filmGrain: st.filmGrain,
       vignette: st.vignette,
     });
-    this.input = new Input(canvas, st.bindings, st);
+    this.input = new Input(canvas, activeBindings(st), inputSettingsOf(st));
     this.input.onPauseRequest = () => {
       if (this.match && !this.paused) this.setPaused(true);
     };
@@ -127,8 +130,12 @@ export class GameController {
 
   applyInputSettings(): void {
     const s = settings.value;
-    this.input.bindings = structuredClone(s.bindings);
-    this.input.settings = { ...this.input.settings, sensitivity: s.sensitivity, adsSensitivity: s.adsSensitivity, invertY: s.invertY, toggleAds: s.toggleAds, toggleCrouch: s.toggleCrouch, holdSprint: s.holdSprint };
+    this.input.bindings = structuredClone(activeBindings(s));
+    this.input.settings = inputSettingsOf(s);
+    const touchpad = s.inputMode === 'touchpad';
+    saveInputModePref(s.inputMode);
+    this.session?.setTouchpad(touchpad);
+    this.rooms.syncInputMode();
     this.match?.applySettings();
   }
 
@@ -316,7 +323,7 @@ export class GameController {
   }
 
   startBotMatch(playlist: PlaylistId, difficulty: BotDifficulty, loadout: Loadout, name: string): void {
-    const session = new HostSession({ map: this.map, playlist, local: { name, loadout }, fillBots: true, difficulty });
+    const session = new HostSession({ map: this.map, playlist, local: { name, loadout, touchpad: settings.value.inputMode === 'touchpad' }, fillBots: true, difficulty });
     session.matchId = `p${Date.now().toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`;
     this.beginMatch(session, { host: true });
   }
@@ -404,7 +411,9 @@ export class GameController {
       const dt = Math.min(0.1, (now - this.last) / 1000);
       this.last = now;
       this.rooms.update();
-      if (this.match) this.match.frame(dt);
+      if (this.match) {
+        if (!this.frozen) this.match.frame(dt);
+      }
       else if (this.menuScene && this.menuCam && this.menuMap) {
         this.menuT += dt;
         this.setMenuCamera(this.menuT);
@@ -443,9 +452,20 @@ export class GameController {
     }
   }
 
+  /** Test hook: stops advancing the match from the render loop (frames are driven by tests). */
+  frozen = false;
+
   /** Test hook: exposes internals for automated tests. */
   debug() {
     return { session: this.session, match: this.match, input: this.input, rooms: this.rooms };
+  }
+
+  /** Test hook: standing hip-fire spread (deg) of a player, with or without touchpad tuning. */
+  debugHipSpread(id: number, touchpad: boolean): number {
+    const p = this.session?.players.find((q) => q.id === id);
+    if (!p) return NaN;
+    const probe = { ...p, vx: 0, vz: 0, bloom: 0, ads: 0, grounded: true, slideT: 0, crouch: 0, touchpad };
+    return currentSpread(probe, getWeapon(p.weapons[p.slot].id));
   }
 
   /** Test hook: fast-forward the current match (see MatchView.simulate). */

@@ -20,9 +20,9 @@ const BOT_NAMES = ['Rook', 'Vasquez', 'Brick', 'Nomad', 'Kilo', 'Mags', 'Patch',
 export interface HostOptions {
   map: MapDef;
   playlist: PlaylistId;
-  local: { name: string; loadout: Loadout; team?: 0 | 1 } | null;
+  local: { name: string; loadout: Loadout; team?: 0 | 1; touchpad?: boolean } | null;
   /** Remote humans already known when the match starts. */
-  remotes?: { id: number; name: string; team: 0 | 1; loadout: Loadout }[];
+  remotes?: { id: number; name: string; team: 0 | 1; loadout: Loadout; touchpad?: boolean }[];
   /** Fill empty slots with bots. */
   fillBots: boolean;
   difficulty: BotDifficulty;
@@ -69,12 +69,12 @@ export class HostSession implements MatchSession {
     const counts = [0, 0];
     if (opts.local) {
       const team = opts.local.team ?? 0;
-      this.sim.addPlayer({ id: nextId, team, name: opts.local.name, bot: false, loadout: opts.local.loadout });
+      this.sim.addPlayer({ id: nextId, team, name: opts.local.name, bot: false, loadout: opts.local.loadout, touchpad: opts.local.touchpad });
       this.localId = nextId++;
       counts[team]++;
     } else this.localId = -1;
     for (const r of opts.remotes ?? []) {
-      this.sim.addPlayer({ id: r.id, team: r.team, name: r.name, bot: false, loadout: r.loadout });
+      this.sim.addPlayer({ id: r.id, team: r.team, name: r.name, bot: false, loadout: r.loadout, touchpad: r.touchpad });
       this.remoteQueues.set(r.id, []);
       nextId = Math.max(nextId, r.id + 1);
       counts[r.team]++;
@@ -133,15 +133,21 @@ export class HostSession implements MatchSession {
   }
 
   /** Adds a remote human mid-match (they spawn next round). */
-  addRemote(id: number, name: string, team: 0 | 1, loadout: Loadout): void {
+  addRemote(id: number, name: string, team: 0 | 1, loadout: Loadout, touchpad = false): void {
     // replace a bot on that team if one exists
     const bot = this.sim.players.find((p) => p.bot && p.team === team && p.connected);
     if (bot) {
       this.sim.removePlayer(bot.id);
       this.bots.delete(bot.id);
     }
-    this.sim.addPlayer({ id, team, name, bot: false, loadout });
+    this.sim.addPlayer({ id, team, name, bot: false, loadout, touchpad });
     this.remoteQueues.set(id, []);
+  }
+
+  /** Sets a player's declared input mode (host-applied touchpad tuning). */
+  setPlayerTouchpad(id: number, on: boolean): void {
+    const p = this.sim.player(id);
+    if (p) p.touchpad = !!on;
   }
 
   removeRemote(id: number): void {
@@ -264,6 +270,10 @@ export class HostSession implements MatchSession {
 
   viewTick(): number {
     return this.sim.tick;
+  }
+
+  setTouchpad(on: boolean): void {
+    if (this.localId >= 0) this.setPlayerTouchpad(this.localId, on);
   }
 
   setLoadout(l: Loadout): void {

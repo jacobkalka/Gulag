@@ -12,7 +12,8 @@ import { PartyService } from './party';
 import { FirebaseSignaling } from './firebaseSignaling';
 import { Matchmaker, matchmakingError } from './matchmaking';
 import { claimMatchXp, installMatchRecorder } from './matches';
-import { setLoadoutSaver } from '@/app/state';
+import { setLoadoutSaver, setPrefsSaver } from '@/app/state';
+import { inputModePatch, settings, updateSettings } from '@/app/settings';
 
 /**
  * Connects to Firebase when configured (see SETUP.md). Without configuration the game stays
@@ -40,6 +41,15 @@ export async function initBackend(game: GameController): Promise<void> {
   installMatchRecorder(game, firebase);
   setProfilePersistence(async (_p, _award, summary) => (summary.matchId ? claimMatchXp(firebase, summary.matchId) : null), true);
   setLoadoutSaver((l) => account.saveLoadout(l));
+  setPrefsSaver((p) => account.savePrefs(p));
+  account.onPrefs = (mode) => {
+    // a fresh device adopts the input mode saved with the account
+    const st = settings.value;
+    if (mode && !st.seenInputHint && st.inputMode !== mode) {
+      updateSettings(inputModePatch(mode));
+      game.applyInputSettings();
+    }
+  };
 
   let stopUser: (() => void) | null = null;
   let presence: PresenceService | null = null;

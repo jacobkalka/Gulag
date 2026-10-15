@@ -14,6 +14,7 @@
     "test:watch": "vitest",
     "e2e": "playwright test",
     "shots": "node scripts/screenshot.mjs",
+    "balance": "tsx scripts/balance.ts --compare",
     "test:rules": "npx -y firebase-tools@15.33.0 --config firebase/emulators.test.json emulators:exec --only firestore,database --project demo-lockdown \"vitest run -c vitest.rules.config.ts\"",
     "emulators": "npx -y firebase-tools@15.33.0 emulators:start --only auth,firestore,database --project demo-lockdown"
   },
@@ -36,6 +37,7 @@
     "@types/three": "0.186.0",
     "eslint": "^10.12.0",
     "globals": "^17.13.0",
+    "tsx": "^4.23.15",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.71.2",
     "vite": "^8.3.4",

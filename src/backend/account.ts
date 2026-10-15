@@ -43,6 +43,8 @@ export class AccountService {
   readonly ready: Promise<void>;
   /** Called whenever the signed-in user changes (after their profile exists). */
   onUser: ((u: User) => void) | null = null;
+  /** Called with the input mode stored in the profile (when the profile loads or changes). */
+  onPrefs: ((mode: 'mouse' | 'touchpad' | undefined) => void) | null = null;
 
   constructor(private fb: Fb) {
     this.ready = new Promise((r) => (this.readyResolve = r));
@@ -89,8 +91,10 @@ export class AccountService {
         loadout: sanitizeLoadout(d.loadout, levelForXp(d.xp ?? 0).level),
         stats: { ...emptyProfileStats(), ...(d.stats ?? {}) },
         guest: u.isAnonymous,
+        inputMode: d.prefs?.inputMode === 'touchpad' ? 'touchpad' : d.prefs?.inputMode === 'mouse' ? 'mouse' : undefined,
       };
       profile.value = p;
+      this.onPrefs?.(p.inputMode);
       this.readyResolve?.();
       this.readyResolve = null;
     });
@@ -152,6 +156,13 @@ export class AccountService {
       if ((e as { code?: string }).code === 'permission-denied') throw new Error('That name is taken', { cause: e });
       throw e;
     }
+  }
+
+  /** Stores account-level preferences (the input mode follows the player between devices). */
+  async savePrefs(prefs: { inputMode: 'mouse' | 'touchpad' }): Promise<void> {
+    const u = this.user;
+    if (!u) return;
+    await updateDoc(doc(this.fb.db, 'users', u.uid), { prefs, updatedAt: serverTimestamp() });
   }
 
   async saveLoadout(l: Loadout): Promise<void> {

@@ -203,7 +203,7 @@ describe('game sim rounds', () => {
     const a = sim.player(0)!;
     a.x = 0;
     a.z = 0;
-    for (let i = 0; i < 60 * 5.2; i++) sim.step(idle);
+    for (let i = 0; i < 60 * (PLAYLISTS['1v1'].rules.captureTime + 0.3); i++) sim.step(idle);
     expect(sim.round.lastReason).toBe('capture');
     expect(sim.round.score[0]).toBe(1);
   });

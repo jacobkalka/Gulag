@@ -13,7 +13,7 @@ import { ByteReader, ByteWriter } from './codec';
 //   both            PING/PONG round-trip measurement
 // Reliable, ordered channel ('r'), JSON: room lobby, match start, game events, roster, chat.
 
-export const PROTOCOL_VERSION = 1;
+export const PROTOCOL_VERSION = 2;
 
 export const MSG = { INPUT: 1, SNAPSHOT: 2, PING: 3, PONG: 4 } as const;
 
@@ -113,7 +113,7 @@ export type SelfState = Pick<
   | 'x' | 'y' | 'z' | 'vx' | 'vy' | 'vz'
   | 'yaw' | 'pitch' | 'crouch' | 'slideT' | 'slideCd' | 'mantleT' | 'sprintBlend' | 'ads' | 'fireCd'
   | 'reloadT' | 'reloadTotal' | 'swapT' | 'meleeT' | 'bloom' | 'lastShotT' | 'spawnProt' | 'sinceHurt'
-  | 'hp' | 'flash' | 'deadT'
+  | 'hp' | 'flash' | 'deadT' | 'coyoteT' | 'jumpBufT'
   | 'shotCount' | 'recoilIdx' | 'prevButtons'
   | 'burstLeft' | 'reloadKind' | 'lethals' | 'tacticals' | 'slot' | 'life'
   | 'grounded' | 'sprinting' | 'alive' | 'meleeHitDone'
@@ -124,7 +124,7 @@ const SELF_F64 = ['x', 'y', 'z', 'vx', 'vy', 'vz'] as const;
 const SELF_F32 = [
   'yaw', 'pitch', 'crouch', 'slideT', 'slideCd', 'mantleT', 'sprintBlend', 'ads', 'fireCd',
   'reloadT', 'reloadTotal', 'swapT', 'meleeT', 'bloom', 'lastShotT', 'spawnProt', 'sinceHurt',
-  'hp', 'flash', 'deadT',
+  'hp', 'flash', 'deadT', 'coyoteT', 'jumpBufT',
 ] as const;
 const SELF_U16 = ['shotCount', 'recoilIdx', 'prevButtons'] as const;
 const SELF_U8 = ['burstLeft', 'reloadKind', 'lethals', 'tacticals', 'slot', 'life'] as const;
@@ -332,6 +332,8 @@ export interface MatchPlayerInfo {
   team: 0 | 1;
   bot: boolean;
   loadout: Loadout;
+  /** Declared touchpad input mode. */
+  touchpad?: boolean;
 }
 
 export interface MatchStart {
@@ -371,7 +373,8 @@ export type HostMsg =
   | { t: 'lobby' };
 
 export type ClientMsg =
-  | { t: 'hello'; v: number; name: string; level: number; loadout: Loadout }
+  | { t: 'hello'; v: number; name: string; level: number; loadout: Loadout; touchpad?: boolean }
+  | { t: 'mode'; touchpad: boolean }
   | { t: 'ready'; ready: boolean }
   | { t: 'team'; team: 0 | 1 }
   | { t: 'loadout'; loadout: Loadout }

@@ -58,6 +58,13 @@ export class Renderer {
   private vmCamera: THREE.PerspectiveCamera | null = null;
   private aoPass: N8AOPostPass | null = null;
   private motionBlur: MotionBlurEffect | null = null;
+  private bloom: BloomEffect | null = null;
+  private ca: ChromaticAberrationEffect | null = null;
+  private vignette: VignetteEffect | null = null;
+  private noise: NoiseEffect | null = null;
+  /** Current aim state: 0 hip .. 1 fully aimed; scoped = looking through a magnified scope. */
+  private aim = 0;
+  private scoped = false;
   private width = 1;
   private height = 1;
   contextLost = false;
@@ -131,6 +138,10 @@ export class Renderer {
     this.composer = composer;
     this.aoPass = null;
     this.motionBlur = null;
+    this.bloom = null;
+    this.ca = null;
+    this.vignette = null;
+    this.noise = null;
     if (!this.scene || !this.camera) return;
     const camera = this.camera;
 
@@ -168,15 +179,14 @@ export class Renderer {
 
     const hdrEffects = [];
     if (q.bloom) {
-      hdrEffects.push(
-        new BloomEffect({
-          intensity: 1.15,
-          luminanceThreshold: 0.92,
-          luminanceSmoothing: 0.25,
-          mipmapBlur: true,
-          radius: 0.72,
-        }),
-      );
+      this.bloom = new BloomEffect({
+        intensity: 1.15,
+        luminanceThreshold: 0.92,
+        luminanceSmoothing: 0.25,
+        mipmapBlur: true,
+        radius: 0.72,
+      });
+      hdrEffects.push(this.bloom);
     }
     const tone = new ToneMappingEffect({ mode: ToneMappingMode.ACES_FILMIC });
     hdrEffects.push(tone);
@@ -187,23 +197,47 @@ export class Renderer {
 
     const finalEffects = [];
     if (this.options.chromaticAberration) {
-      finalEffects.push(
-        new ChromaticAberrationEffect({
-          offset: new THREE.Vector2(0.0009, 0.0006),
-          radialModulation: true,
-          modulationOffset: 0.35,
-        }),
-      );
+      this.ca = new ChromaticAberrationEffect({
+        offset: new THREE.Vector2(0.0009, 0.0006),
+        radialModulation: true,
+        modulationOffset: 0.35,
+      });
+      finalEffects.push(this.ca);
     }
-    if (this.options.vignette) finalEffects.push(new VignetteEffect({ offset: 0.32, darkness: 0.55 }));
+    if (this.options.vignette) {
+      this.vignette = new VignetteEffect({ offset: 0.32, darkness: 0.55 });
+      finalEffects.push(this.vignette);
+    }
     if (this.options.filmGrain) {
-      const noise = new NoiseEffect({ blendFunction: BlendFunction.OVERLAY, premultiply: false });
-      noise.blendMode.opacity.value = 0.09;
-      finalEffects.push(noise);
+      this.noise = new NoiseEffect({ blendFunction: BlendFunction.OVERLAY, premultiply: false });
+      this.noise.blendMode.opacity.value = 0.09;
+      finalEffects.push(this.noise);
     }
     finalEffects.push(this.screenFx);
     composer.addPass(new EffectPass(camera, ...finalEffects));
     composer.setSize(this.width, this.height, false);
+    this.applyAim();
+  }
+
+  /**
+   * Aiming down sights: chromatic aberration, grain, vignette and motion blur fade out and bloom
+   * drops, so the sight picture (and especially a magnified scope) stays crisp.
+   */
+  setAim(ads: number, scoped: boolean): void {
+    if (Math.abs(ads - this.aim) < 0.002 && scoped === this.scoped) return;
+    this.aim = ads;
+    this.scoped = scoped;
+    this.applyAim();
+  }
+
+  private applyAim(): void {
+    const a = this.scoped ? 1 : this.aim;
+    const keep = 1 - a;
+    if (this.bloom) this.bloom.intensity = 1.15 * (1 - 0.7 * a);
+    if (this.ca) this.ca.offset.set(0.0009 * keep, 0.0006 * keep);
+    if (this.vignette) this.vignette.darkness = 0.55 * (1 - 0.85 * a);
+    if (this.noise) this.noise.blendMode.opacity.value = 0.09 * (1 - 0.9 * a);
+    if (this.motionBlur) this.motionBlur.intensity = keep;
   }
 
   resize(): void {

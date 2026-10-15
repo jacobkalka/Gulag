@@ -32,6 +32,8 @@ export interface Profile {
   loadout: Loadout;
   stats: ProfileStats;
   guest: boolean;
+  /** Input mode stored with the online account (follows the player between devices). */
+  inputMode?: 'mouse' | 'touchpad';
 }
 
 export function emptyProfileStats(): ProfileStats {
@@ -106,6 +108,20 @@ export function dismissToast(id: number): void {
 }
 
 let loadoutSaver: ((l: Loadout) => Promise<void>) | null = null;
+let prefsSaver: ((p: { inputMode: 'mouse' | 'touchpad' }) => Promise<void>) | null = null;
+
+/** Installed by the online backend: account preferences are stored in the Firestore profile. */
+export function setPrefsSaver(fn: ((p: { inputMode: 'mouse' | 'touchpad' }) => Promise<void>) | null): void {
+  prefsSaver = fn;
+}
+
+/** Saves the input mode with the account (online) and in the profile (offline). */
+export function saveInputModePref(mode: 'mouse' | 'touchpad'): void {
+  if (profile.value.inputMode === mode) return;
+  profile.value = { ...profile.value, inputMode: mode };
+  if (prefsSaver) prefsSaver({ inputMode: mode }).catch((e) => console.warn('prefs save failed', e));
+  else saveLocalProfile(profile.value);
+}
 
 /** Installed by the online backend: loadouts are stored in the Firestore profile. */
 export function setLoadoutSaver(fn: ((l: Loadout) => Promise<void>) | null): void {

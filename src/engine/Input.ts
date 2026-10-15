@@ -23,7 +23,8 @@ export type Action =
   | 'interact'
   | 'inspect'
   | 'scoreboard'
-  | 'ping';
+  | 'ping'
+  | 'flashlight';
 
 export type Bindings = Record<Action, string[]>;
 
@@ -43,11 +44,40 @@ export const DEFAULT_BINDINGS: Bindings = {
   primary: ['Digit1'],
   secondary: ['Digit2'],
   lethal: ['KeyG'],
-  tactical: ['KeyF'],
+  tactical: ['KeyX'],
   interact: ['KeyE'],
   inspect: ['KeyI'],
   scoreboard: ['Tab'],
   ping: ['KeyZ'],
+  flashlight: ['KeyF'],
+};
+
+/**
+ * Touchpad mode defaults: fire and aim from the keyboard (clicking while dragging a touchpad is
+ * awkward). Space fires, Left Shift aims, E jumps, Q sprints, two-finger scroll swaps weapons.
+ */
+export const TOUCHPAD_BINDINGS: Bindings = {
+  forward: ['KeyW'],
+  back: ['KeyS'],
+  left: ['KeyA'],
+  right: ['KeyD'],
+  jump: ['KeyE'],
+  crouch: ['KeyC', 'ControlLeft'],
+  sprint: ['KeyQ'],
+  fire: ['Space', 'Mouse0'],
+  ads: ['ShiftLeft', 'Mouse2'],
+  reload: ['KeyR'],
+  melee: ['KeyV'],
+  swap: ['WheelUp', 'WheelDown'],
+  primary: ['Digit1'],
+  secondary: ['Digit2'],
+  lethal: ['KeyG'],
+  tactical: ['KeyX'],
+  interact: [],
+  inspect: ['KeyI'],
+  scoreboard: ['Tab'],
+  ping: ['KeyZ'],
+  flashlight: ['KeyF'],
 };
 
 export const ACTION_LABELS: Record<Action, string> = {
@@ -71,6 +101,7 @@ export const ACTION_LABELS: Record<Action, string> = {
   inspect: 'Inspect weapon',
   scoreboard: 'Scoreboard',
   ping: 'Ping',
+  flashlight: 'Weapon flashlight',
 };
 
 export function keyLabel(code: string): string {
@@ -92,7 +123,34 @@ export interface InputSettings {
   toggleAds: boolean;
   toggleCrouch: boolean;
   holdSprint: boolean;
+  /** 'touchpad' uses its own sensitivity, acceleration curve and smoothing. */
+  mode: 'mouse' | 'touchpad';
+  touchpadSensitivity: number;
+  touchpadCurve: number;
+  touchpadSmoothing: number;
+  /** Arrow keys turn the view instead of moving. */
+  arrowLook: boolean;
+  /** Degrees per second for arrow-key look. */
+  arrowLookSpeed: number;
+  /** Sprint automatically while pushing forward. */
+  autoSprint: boolean;
 }
+
+export const DEFAULT_INPUT_SETTINGS: InputSettings = {
+  sensitivity: 2.2,
+  adsSensitivity: 0.85,
+  invertY: false,
+  toggleAds: false,
+  toggleCrouch: false,
+  holdSprint: false,
+  mode: 'mouse',
+  touchpadSensitivity: 3.2,
+  touchpadCurve: 1.25,
+  touchpadSmoothing: 0.25,
+  arrowLook: false,
+  arrowLookSpeed: 150,
+  autoSprint: false,
+};
 
 export class Input {
   bindings: Bindings;
@@ -113,13 +171,18 @@ export class Input {
   /** Set by the game: current ADS fraction and zoom so ADS sensitivity scales with FOV. */
   adsFactor = 0;
   zoom = 1;
+  /** Set by the game each frame: look speed multiplier (touchpad aim-assist slowdown). */
+  lookScale = 1;
+  private smoothX = 0;
+  private smoothY = 0;
+  private autoSprintT = 0;
   onPauseRequest: (() => void) | null = null;
   onRebindCapture: ((code: string) => void) | null = null;
   private gamepadIndex = -1;
 
   constructor(private el: HTMLElement, bindings: Bindings = DEFAULT_BINDINGS, settings?: Partial<InputSettings>) {
     this.bindings = structuredClone(bindings);
-    this.settings = { sensitivity: 2.2, adsSensitivity: 0.85, invertY: false, toggleAds: false, toggleCrouch: false, holdSprint: false, ...settings };
+    this.settings = { ...DEFAULT_INPUT_SETTINGS, ...settings };
     window.addEventListener('keydown', this.onKeyDown);
     window.addEventListener('keyup', this.onKeyUp);
     el.addEventListener('mousedown', this.onMouseDown);
@@ -154,6 +217,8 @@ export class Input {
         /* needs a user gesture; the deploy overlay will ask for a click */
       }
     };
+    // touchpads feel better with the OS pointer acceleration, so raw input is mouse-only
+    if (this.settings.mode === 'touchpad') return plain();
     try {
       const r = el.requestPointerLock({ unadjustedMovement: true });
       if (r && typeof (r as Promise<void>).catch === 'function') (r as Promise<void>).catch(plain);
@@ -212,10 +277,29 @@ export class Input {
   private onMouseMove = (e: MouseEvent) => {
     if (!this.locked || !this.enabled) return;
     // Base: sensitivity 1.0 = 0.022 deg per count (classic), scaled for zoom when aiming.
-    const adsMul = 1 + (this.settings.adsSensitivity / this.zoom - 1) * this.adsFactor;
-    const k = 0.022 * (Math.PI / 180) * this.settings.sensitivity * adsMul;
-    const dx = clamp(e.movementX, -400, 400) * k;
-    const dy = clamp(e.movementY, -400, 400) * k * (this.settings.invertY ? -1 : 1);
+    const st = this.settings;
+    const adsMul = 1 + (st.adsSensitivity / this.zoom - 1) * this.adsFactor;
+    let mx = clamp(e.movementX, -400, 400);
+    let my = clamp(e.movementY, -400, 400);
+    let sens = st.sensitivity;
+    if (st.mode === 'touchpad') {
+      // acceleration curve around a typical 6-count movement, then light smoothing
+      const mag = Math.hypot(mx, my);
+      if (mag > 0) {
+        const g = Math.pow(mag / 6, st.touchpadCurve - 1);
+        mx *= g;
+        my *= g;
+      }
+      const sm = clamp(st.touchpadSmoothing, 0, 0.8);
+      this.smoothX = this.smoothX * sm + mx * (1 - sm);
+      this.smoothY = this.smoothY * sm + my * (1 - sm);
+      mx = this.smoothX;
+      my = this.smoothY;
+      sens = st.touchpadSensitivity;
+    }
+    const k = 0.022 * (Math.PI / 180) * sens * adsMul * this.lookScale;
+    const dx = mx * k;
+    const dy = my * k * (st.invertY ? -1 : 1);
     this.yaw -= dx;
     this.pitch = clamp(this.pitch - dy, -1.47, 1.47);
     this.lookDX += dx;
@@ -223,13 +307,22 @@ export class Input {
   };
 
   isDown(a: Action): boolean {
-    for (const c of this.bindings[a]) if (this.down.has(c) || this.wheelPulse.has(c)) return true;
+    const arrowsLook = this.settings.arrowLook && (a === 'forward' || a === 'back' || a === 'left' || a === 'right');
+    for (const c of this.bindings[a] ?? []) {
+      if (arrowsLook && c.startsWith('Arrow')) continue;
+      if (this.down.has(c) || this.wheelPulse.has(c)) return true;
+    }
     return false;
+  }
+
+  /** True while a physical key/button is held (used by tests and arrow look). */
+  isCodeDown(code: string): boolean {
+    return this.down.has(code);
   }
 
   /** True once per physical press. */
   consume(a: Action): boolean {
-    for (const c of this.bindings[a]) {
+    for (const c of this.bindings[a] ?? []) {
       if (this.pressedOnce.has(c)) {
         this.pressedOnce.delete(c);
         return true;
@@ -257,8 +350,18 @@ export class Input {
     return navigator.getGamepads()[this.gamepadIndex] ?? null;
   }
 
-  /** Gamepad look integration (call each frame). */
+  /** Gamepad and arrow-key look integration (call each frame). */
   updateGamepad(dt: number): void {
+    if (this.settings.arrowLook && this.locked && this.enabled) {
+      const ax = (this.down.has('ArrowRight') ? 1 : 0) - (this.down.has('ArrowLeft') ? 1 : 0);
+      const ay = (this.down.has('ArrowDown') ? 1 : 0) - (this.down.has('ArrowUp') ? 1 : 0);
+      const adsMul = 1 + (this.settings.adsSensitivity / this.zoom - 1) * this.adsFactor;
+      const rate = (this.settings.arrowLookSpeed * Math.PI) / 180 * adsMul * this.lookScale * dt;
+      this.yaw -= ax * rate;
+      this.pitch = clamp(this.pitch - ay * rate * (this.settings.invertY ? -1 : 1), -1.47, 1.47);
+      this.lookDX += ax * rate;
+      this.lookDY += ay * rate;
+    }
     const gp = this.gamepad();
     if (!gp) return;
     const rx = dz(gp.axes[2] ?? 0);
@@ -288,6 +391,11 @@ export class Input {
       if (this.consume('sprint') || (gp && gpb(10))) this.sprintLatched = true;
       const { mz } = this.axes();
       if (mz < 0.5) this.sprintLatched = false;
+      // auto sprint: holding forward for a moment starts a sprint (not while aiming)
+      if (this.settings.autoSprint && mz > 0.9 && !this.isDown('ads') && !this.adsToggled) {
+        this.autoSprintT += 1;
+        if (this.autoSprintT > 9) this.sprintLatched = true;
+      } else this.autoSprintT = 0;
       if (this.sprintLatched || sprintKey) b |= BTN.SPRINT;
     }
     if (this.isDown('fire') || (gp?.buttons[7]?.value ?? 0) > 0.4) b |= BTN.FIRE;

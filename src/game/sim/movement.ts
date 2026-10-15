@@ -14,23 +14,32 @@ export const MOVE = {
   eyeCrouch: 1.02,
   eyeSlide: 0.82,
   step: 0.42,
-  gravity: 20,
-  jumpV: 6.1,
-  walk: 4.6,
-  sprint: 6.7,
-  crouchSpeed: 2.5,
-  backMul: 0.85,
-  accel: 60,
-  airAccel: 10,
-  decel: 42,
-  slideSpeed: 8.4,
-  slideTime: 0.72,
-  slideFriction: 6.5,
-  slideCd: 0.9,
+  gravity: 22.5,
+  jumpV: 6.5,
+  walk: 5.8,
+  sprint: 8.4,
+  crouchSpeed: 3.2,
+  backMul: 0.88,
+  accel: 95,
+  airAccel: 24,
+  decel: 75,
+  /** Minimum slide entry speed; faster entries keep their speed (momentum). */
+  slideSpeed: 10.2,
+  /** Extra speed added on slide entry. */
+  slideBoost: 1.0,
+  slideTime: 0.85,
+  /** Friction (1/s) early in the slide and near its end. */
+  slideFrictionStart: 0.9,
+  slideFrictionEnd: 4.2,
+  slideCd: 0.85,
   mantleMax: 1.35,
-  mantleTime: 0.34,
-  crouchRate: 7,
+  mantleTime: 0.3,
+  crouchRate: 12,
   snapDown: 0.45,
+  /** Jump still allowed this long after running off a ledge. */
+  coyoteTime: 0.1,
+  /** A jump pressed this long before landing fires on touchdown. */
+  jumpBuffer: 0.12,
 };
 
 export interface MoveResult {
@@ -61,6 +70,8 @@ export function stepMovement(p: PlayerState, inp: PlayerInput, world: CollisionW
     p.pitch = Math.max(-1.48, Math.min(1.48, inp.pitch));
   }
   if (p.slideCd > 0) p.slideCd -= dt;
+  if (p.coyoteT > 0) p.coyoteT -= dt;
+  if (p.jumpBufT > 0) p.jumpBufT -= dt;
 
   // ---- mantle in progress: scripted arc onto the ledge
   if (p.mantleT > 0) {
@@ -103,7 +114,7 @@ export function stepMovement(p: PlayerState, inp: PlayerInput, world: CollisionW
   if (!frozen && p.sprinting && pressed(inp, p, BTN.CROUCH) && p.slideCd <= 0 && horizSpeed > 5) {
     p.slideT = MOVE.slideTime;
     p.slideCd = MOVE.slideCd + MOVE.slideTime;
-    const boost = Math.max(horizSpeed, MOVE.slideSpeed);
+    const boost = Math.max(horizSpeed + MOVE.slideBoost, MOVE.slideSpeed);
     const hl = horizSpeed > 0.01 ? horizSpeed : 1;
     p.vx = (p.vx / hl) * boost;
     p.vz = (p.vz / hl) * boost;
@@ -118,20 +129,35 @@ export function stepMovement(p: PlayerState, inp: PlayerInput, world: CollisionW
   if (p.crouch < crouchTarget) p.crouch = Math.min(crouchTarget, p.crouch + MOVE.crouchRate * dt);
   else if (p.crouch > crouchTarget) p.crouch = Math.max(crouchTarget, p.crouch - MOVE.crouchRate * dt);
 
-  // ---- jump / mantle
-  if (!frozen && pressed(inp, p, BTN.JUMP)) {
-    if (tryMantle(p, world, fx, fz)) {
+  // ---- jump / mantle (a press in the air is buffered briefly; coyote time after a ledge)
+  const jumpPress = !frozen && pressed(inp, p, BTN.JUMP);
+  if (jumpPress && !p.grounded && p.coyoteT <= 0) p.jumpBufT = MOVE.jumpBuffer;
+  const canGroundJump = p.grounded || p.coyoteT > 0;
+  if (jumpPress || (p.jumpBufT > 0 && p.grounded && !frozen)) {
+    if (jumpPress && tryMantle(p, world, fx, fz)) {
       res.mantled = true;
+      p.jumpBufT = 0;
       return res;
     }
-    if (p.grounded && p.crouch < 0.6) {
+    if (canGroundJump && p.slideT > 0) {
+      // jumping out of a slide: a hop that keeps the slide's horizontal momentum
+      p.vy = MOVE.jumpV * 0.92;
+      p.grounded = false;
+      p.coyoteT = 0;
+      p.jumpBufT = 0;
+      p.slideT = 0;
+      p.crouch = Math.min(p.crouch, 0.5);
+      res.jumped = true;
+    } else if (canGroundJump && p.crouch < 0.6) {
       p.vy = MOVE.jumpV;
       p.grounded = false;
-      p.slideT = 0;
+      p.coyoteT = 0;
+      p.jumpBufT = 0;
       res.jumped = true;
     } else if (p.grounded && p.crouch >= 0.6) {
       // jump while crouched = stand up
       p.crouch = Math.max(0, p.crouch - 0.01);
+      p.jumpBufT = 0;
     }
   }
   // airborne auto-mantle when pushing into a ledge
@@ -153,13 +179,16 @@ export function stepMovement(p: PlayerState, inp: PlayerInput, world: CollisionW
 
   if (p.slideT > 0) {
     p.slideT -= dt;
-    const f = Math.exp(-MOVE.slideFriction * dt * 0.35);
+    // momentum-preserving slide: low friction at first, more toward the end
+    const prog = 1 - Math.max(0, p.slideT) / MOVE.slideTime;
+    const fr = MOVE.slideFrictionStart + (MOVE.slideFrictionEnd - MOVE.slideFrictionStart) * prog * prog;
+    const f = Math.exp(-fr * dt);
     p.vx *= f;
     p.vz *= f;
-    // slight steering
-    p.vx += rx * mx * 3 * dt;
-    p.vz += rz * mx * 3 * dt;
-    if (p.slideT <= 0 || Math.hypot(p.vx, p.vz) < 2.2) p.slideT = 0;
+    // steering: rotate the slide direction a little toward the strafe input
+    p.vx += rx * mx * 4 * dt;
+    p.vz += rz * mx * 4 * dt;
+    if (p.slideT <= 0 || Math.hypot(p.vx, p.vz) < 2.6) p.slideT = 0;
   } else if (p.grounded) {
     const ax = wx - p.vx;
     const az = wz - p.vz;
@@ -214,6 +243,7 @@ export function stepMovement(p: PlayerState, inp: PlayerInput, world: CollisionW
       p.y = sup.y; // stick to slopes / stairs going down
       p.vy = 0;
     } else {
+      if (p.grounded && p.vy <= 0) p.coyoteT = MOVE.coyoteTime;
       p.grounded = false;
     }
     // ceiling

@@ -16,21 +16,23 @@ describe('weapons data', () => {
   });
   it('interpolates damage falloff', () => {
     const w = getWeapon('halberd');
-    expect(damageAt(w, 0)).toBe(30);
-    expect(damageAt(w, 11)).toBeCloseTo(27.5);
-    expect(damageAt(w, 100)).toBe(21);
+    expect(damageAt(w, 0)).toBe(19.5);
+    expect(damageAt(w, 11)).toBeCloseTo(18.25);
+    expect(damageAt(w, 100)).toBe(13.5);
   });
-  it('time to kill is in a fast-but-fair band for automatics', () => {
+  it('time to kill is in the longer-fight band for automatics', () => {
     for (const id of ['halberd', 'rook9', 'talon', 'kestrel']) {
       const ttk = timeToKill(getWeapon(id), 5);
-      expect(ttk).toBeGreaterThan(150);
-      expect(ttk).toBeLessThan(420);
+      expect(ttk).toBeGreaterThan(300);
+      expect(ttk).toBeLessThan(650);
     }
   });
-  it('sniper one-shots upper body, DMR one-shots heads up close', () => {
+  it('sniper still one-shots the head and upper chest; DMR is three to the body, two to the head', () => {
     expect(shotsToKill(getWeapon('vigil'), 20, 'chest')).toBe(1);
-    expect(shotsToKill(getWeapon('lancet'), 10, 'head')).toBe(1);
-    expect(shotsToKill(getWeapon('lancet'), 10, 'chest')).toBe(2);
+    expect(shotsToKill(getWeapon('vigil'), 20, 'head')).toBe(1);
+    expect(shotsToKill(getWeapon('vigil'), 20, 'stomach')).toBe(2);
+    expect(shotsToKill(getWeapon('lancet'), 10, 'head')).toBe(2);
+    expect(shotsToKill(getWeapon('lancet'), 10, 'chest')).toBe(3);
   });
   it('shotgun is lethal up close and weak at range', () => {
     expect(shotsToKill(getWeapon('thresher'), 2)).toBe(1);
@@ -38,8 +40,11 @@ describe('weapons data', () => {
   });
   it('burst TTK accounts for burst delay', () => {
     const c = getWeapon('cinder');
-    expect(shotsToKill(c, 5)).toBe(3);
-    expect(timeToKill(c, 5)).toBeLessThan(150);
+    expect(shotsToKill(c, 5)).toBe(4);
+    expect(timeToKill(c, 5)).toBeLessThan(250);
+    // a fifth round spills into the next burst
+    expect(shotsToKill(c, 20)).toBe(5);
+    expect(timeToKill(c, 20)).toBeGreaterThan(450);
   });
   it('stat bars are normalized', () => {
     for (const w of WEAPONS) {

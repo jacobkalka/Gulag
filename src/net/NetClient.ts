@@ -15,6 +15,8 @@ export interface NetClientOptions {
   name: string;
   level: number;
   loadout: Loadout;
+  /** Declared touchpad input mode. */
+  touchpad?: boolean;
   now?: () => number;
   /** Shared collision world (built once per map). */
   world?: CollisionWorld;
@@ -43,7 +45,7 @@ export class NetClient {
     link.onR = (m) => this.onMsg(m as HostMsg);
     link.onU = (d) => this.onData(d);
     link.onClose = (reason) => this.handleClose(reason);
-    this.send({ t: 'hello', v: PROTOCOL_VERSION, name: o.name, level: o.level, loadout: o.loadout });
+    this.send({ t: 'hello', v: PROTOCOL_VERSION, name: o.name, level: o.level, loadout: o.loadout, touchpad: !!o.touchpad });
   }
 
   get pid(): string {
@@ -70,6 +72,11 @@ export class NetClient {
   }
   chat(text: string): void {
     this.send({ t: 'chat', text });
+  }
+  setTouchpad(on: boolean): void {
+    this.o.touchpad = on;
+    if (this.session) this.session.setTouchpad(on);
+    else this.send({ t: 'mode', touchpad: on });
   }
 
   /** Periodic upkeep (pings in the lobby). Call every frame. */

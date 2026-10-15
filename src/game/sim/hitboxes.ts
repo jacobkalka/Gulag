@@ -82,11 +82,18 @@ function rayCapsule(ox: number, oy: number, oz: number, dx: number, dy: number, 
   return best;
 }
 
-/** Nearest hitbox hit along the ray within maxT, or null. Direction should be unit length. */
-export function rayVsBody(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, maxT: number, pose: BodyPose): HitResult | null {
+/**
+ * Nearest hitbox hit along the ray within maxT, or null. Direction should be unit length.
+ * `inflate` grows every hitbox radius (touchpad hit forgiveness, decided by the host).
+ */
+export function rayVsBody(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, maxT: number, pose: BodyPose, inflate = 0): HitResult | null {
   // broadphase: bounding cylinder
   const hb = buildHitboxes(pose);
-  const quick = rayCapsule(ox, oy, oz, dx, dy, dz, { ax: pose.x, ay: pose.y, az: pose.z, by: pose.y + 1.85, r: 0.45 });
+  if (inflate > 0) {
+    hb.head.r += inflate * 0.6;
+    for (const [, cap] of hb.parts) cap.r += inflate;
+  }
+  const quick = rayCapsule(ox, oy, oz, dx, dy, dz, { ax: pose.x, ay: pose.y, az: pose.z, by: pose.y + 1.85, r: 0.45 + inflate });
   if (quick > maxT) return null;
   let bestT = maxT;
   let best: Hitbox | null = null;

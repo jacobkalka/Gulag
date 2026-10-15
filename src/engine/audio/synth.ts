@@ -365,6 +365,25 @@ export const SYNTHS: Record<string, { fn: SynthFn; dur: number; variants?: numbe
       noiseHit(ctx, r, { t: 0.02, dur: 1.8, type: 'lowpass', f: 1500, f2: 100, gain: 0.4, decay: 1.5, color: 'pink' });
     },
   },
+  heartbeat: {
+    dur: 0.7,
+    fn: (ctx, r) => {
+      // lub-dub: two soft, deep thumps
+      tone(ctx, { type: 'sine', f: 58, f2: 38, dur: 0.16, gain: 0.55, attack: 0.008 });
+      noiseHit(ctx, r, { dur: 0.08, type: 'lowpass', f: 140, gain: 0.35, decay: 0.07, color: 'brown' });
+      tone(ctx, { t: 0.22, type: 'sine', f: 52, f2: 34, dur: 0.14, gain: 0.4, attack: 0.008 });
+      noiseHit(ctx, r, { t: 0.22, dur: 0.07, type: 'lowpass', f: 120, gain: 0.25, decay: 0.06, color: 'brown' });
+    },
+  },
+  breath: {
+    dur: 1.6,
+    variants: 2,
+    fn: (ctx, r) => {
+      // labored inhale + exhale through the mouth
+      noiseHit(ctx, r, { dur: 0.55, type: 'bandpass', f: 900 + r() * 200, f2: 1400, q: 0.7, gain: 0.16, attack: 0.25, decay: 0.3, color: 'pink' });
+      noiseHit(ctx, r, { t: 0.7, dur: 0.75, type: 'bandpass', f: 1200, f2: 600, q: 0.6, gain: 0.2, attack: 0.08, decay: 0.6, color: 'pink' });
+    },
+  },
   tinnitus: {
     dur: 3.0,
     fn: (ctx) => tone(ctx, { type: 'sine', f: 4100, dur: 3.0, gain: 0.12, attack: 0.05 }),

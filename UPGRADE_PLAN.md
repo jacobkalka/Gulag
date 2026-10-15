@@ -5,7 +5,9 @@ touchpad controls, camera feel and rebalancing) is built on top of the existing 
 file is the working plan: decisions, risks, and a checklist that maps every item of the request to the
 milestone that delivers it. It is updated at the end of each milestone.
 
-Safety net: the pre-upgrade state is tagged `v1-before-upgrade` (commit `705240d`). Fixed-camera
+Safety net: the pre-upgrade state is tagged `v1-before-upgrade` (commit `705240d`). The tag exists in
+the local clone; this session's git proxy refuses tag pushes, so on GitHub the same commit is
+identified by its hash. Fixed-camera
 screenshots of that build are in [`screenshots/before/`](screenshots/before/) (taken with
 `node scripts/fixedshots.mjs screenshots/before medium`).
 
@@ -146,7 +148,7 @@ Status: ☐ open, ☑ done (verified by running it), ◐ partial (see notes).
 | 1D Upgraded models with more detail, damage, wear | 2, 5-7 | ☐ |
 | 1D 3-5 variants of common props | 2 | ☐ |
 | 1D Seeded scatter (same for all players), clear movement lanes, matching collision proxies | 2, 5 | ☐ |
-| 1E ACES, GTAO, high-threshold bloom, grain, vignette, optional CA/MB off in ADS | 1, 2 | ☐ |
+| 1E ACES, GTAO, high-threshold bloom, grain, vignette, optional CA/MB off in ADS | 1, 2 | ◐ CA/MB/grain/vignette fade in ADS (M1); bloom threshold in M2 |
 | 1E Light shafts, local fog, dust, steam, embers, per-map weather | 2, 6, 7 | ☐ |
 | 1E Low/Medium/High/Ultra scaling of every new effect, 60 FPS Medium target | 2, 8 | ☐ |
 | 1F S-curve contrast, deep but not clipped blacks, high key-to-fill | 2 | ☐ |
@@ -159,7 +161,7 @@ Status: ☐ open, ☑ done (verified by running it), ◐ partial (see notes).
 | 1F Specular highlights/reflections on wet, metal, ice (probes, cheap fallbacks) | 2 | ☐ |
 | 1F Rim light on players and bots | 2, 3 | ☐ |
 | 1F Layered depth, light guiding routes and objectives | 2, 5-7 | ☐ |
-| 1F Clamped glow; glow drops in ADS; HUD always readable | 1, 2 | ☐ |
+| 1F Clamped glow; glow drops in ADS; HUD always readable | 1, 2 | ◐ bloom drops 70% in ADS (M1); clamp in M2 |
 | 1F Settings: Glow/Bloom, Contrast, Visual Style (Cinematic default) | 2 | ☐ |
 | 1F `npm run audit:contrast` with histograms from fixed cameras on each map | 2, 8 | ☐ |
 
@@ -202,14 +204,14 @@ Status: ☐ open, ☑ done (verified by running it), ◐ partial (see notes).
 ### Section 4 – Scope and tracers
 | Item | M | Status |
 |---|---|---|
-| Find and fix the cause of the faded scope view | 1 | ☐ |
-| Crisp lens, mask only outside, correct magnification and tone mapping | 1 | ☐ |
-| Disable/reduce DOF, MB, CA, grain, bloom, vignette in ADS | 1 | ☐ |
-| Small believable scope sway (hold breath optional) | 1 | ☐ |
-| Thin, short, fast tracers on every 3rd-5th round, offset from the muzzle | 1 | ☐ |
-| Smaller muzzle flash (especially ADS), clamped light pulse | 1 | ☐ |
-| Less smoke in front of the camera in ADS | 1 | ☐ |
-| Screenshots of scoped continuous fire (sniper and AR) | 1 | ☐ |
+| Find and fix the cause of the faded scope view | 1 | ☑ |
+| Crisp lens, mask only outside, correct magnification and tone mapping | 1 | ☑ |
+| Disable/reduce DOF, MB, CA, grain, bloom, vignette in ADS | 1 | ☑ |
+| Small believable scope sway (hold breath optional) | 1 | ☑ |
+| Thin, short, fast tracers on every 3rd-5th round, offset from the muzzle | 1 | ☑ |
+| Smaller muzzle flash (especially ADS), clamped light pulse | 1 | ☑ |
+| Less smoke in front of the camera in ADS | 1 | ☑ |
+| Screenshots of scoped continuous fire (sniper and AR) | 1 | ☑ |
 
 ### Section 5 – Audio
 | Item | M | Status |
@@ -227,31 +229,31 @@ Status: ☐ open, ☑ done (verified by running it), ◐ partial (see notes).
 ### Section 6 – Controls
 | Item | M | Status |
 |---|---|---|
-| Input Mode Mouse/Touchpad, persisted (profile and localStorage) | 1 | ☐ |
-| Mouse mode keeps pointer lock with `unadjustedMovement` | 1 | ☐ |
-| Touchpad: hip spread x0.4-0.5 from weapon data, host-clamped | 1 | ☐ |
-| Touchpad: subtle aim assist (slowdown, stickiness) with a strength slider | 1 | ☐ |
-| Touchpad: keyboard fire and ADS, ADS toggle/hold, optional arrow-key look | 1 | ☐ |
-| Touchpad: separate sensitivity and curve | 1 | ☐ |
-| Touchpad: lower visual recoil, larger hit forgiveness | 1 | ☐ |
-| Touchpad: first-launch hint | 1 | ☐ |
-| New settings: Brightness/Gamma, Camera Shake + Reduce Motion, Input Mode, Aim Assist, ADS Toggle/Hold, Flashlight key | 1, 2 | ☐ |
+| Input Mode Mouse/Touchpad, persisted (profile and localStorage) | 1 | ☑ |
+| Mouse mode keeps pointer lock with `unadjustedMovement` | 1 | ☑ |
+| Touchpad: hip spread x0.4-0.5 from weapon data, host-clamped | 1 | ☑ |
+| Touchpad: subtle aim assist (slowdown, stickiness) with a strength slider | 1 | ☑ |
+| Touchpad: keyboard fire and ADS, ADS toggle/hold, optional arrow-key look | 1 | ☑ |
+| Touchpad: separate sensitivity and curve | 1 | ☑ |
+| Touchpad: lower visual recoil, larger hit forgiveness | 1 | ☑ |
+| Touchpad: first-launch hint | 1 | ☑ |
+| New settings: Brightness/Gamma, Camera Shake + Reduce Motion, Input Mode, Aim Assist, ADS Toggle/Hold, Flashlight key | 1, 2 | ◐ all present; the flashlight itself arrives in M2 |
 
 ### Section 7 – Camera feel and damage
 | Item | M | Status |
 |---|---|---|
-| Procedural movement shake (bob, sway, roll, footstep impulses), scaled, reduced in ADS | 1 | ☐ |
-| Directional damage flinch, red edge flash, desaturation, low-HP pulse and heartbeat | 1 | ☐ |
-| CoD-style regen (5 s delay, smooth refill), one config file, host-validated | 1 | ☐ |
+| Procedural movement shake (bob, sway, roll, footstep impulses), scaled, reduced in ADS | 1 | ☑ |
+| Directional damage flinch, red edge flash, desaturation, low-HP pulse and heartbeat | 1 | ☑ |
+| CoD-style regen (5 s delay, smooth refill), one config file, host-validated | 1 | ☑ |
 
 ### Section 8 – Balance
 | Item | M | Status |
 |---|---|---|
-| TTK 1.5-1.8x longer; head multipliers kept; snipers strong; shotguns punishing | 1 | ☐ |
-| Round time 2-2.5 min, overtime retuned | 1 | ☐ |
-| Movement 20-30% faster, snappy accel/decel, air control, momentum slide, fast crouch, responsive jump | 1 | ☐ |
-| Host validation and prediction updated; tested at 80-150 ms | 1 | ☐ |
-| `npm run balance` (TTK per weapon, close/mid/long, body/head) | 1 | ☐ |
+| TTK 1.5-1.8x longer; head multipliers kept; snipers strong; shotguns punishing | 1 | ☑ |
+| Round time 2-2.5 min, overtime retuned | 1 | ☑ |
+| Movement 20-30% faster, snappy accel/decel, air control, momentum slide, fast crouch, responsive jump | 1 | ☑ |
+| Host validation and prediction updated; tested at 80-150 ms | 1 | ☑ |
+| `npm run balance` (TTK per weapon, close/mid/long, body/head) | 1 | ☑ |
 
 ### Sections 9-11 – Networking, performance, testing
 | Item | M | Status |
@@ -264,9 +266,9 @@ Status: ☐ open, ☑ done (verified by running it), ◐ partial (see notes).
 | `?perf` overlay (FPS, frame time, draw calls, triangles, shadow lights, memory) | 2 | ☐ |
 | `docs/perf.md` per map | 8 | ☐ |
 | Fixed-camera before/after screenshots per map | 0, 2, 5-9 | ◐ before-shots taken |
-| Audits, balance, bot sims, typecheck/lint/unit tests (regen, damage, TTK, input-mode multipliers, team skins) | 1-8 | ☐ |
-| ADS scoped screenshots (sniper and AR) while firing | 1 | ☐ |
-| Touchpad mode end-to-end test | 1 | ☐ |
+| Audits, balance, bot sims, typecheck/lint/unit tests (regen, damage, TTK, input-mode multipliers, team skins) | 1-8 | ◐ balance + regen/damage/TTK/input-mode tests done; team skins in M3 |
+| ADS scoped screenshots (sniper and AR) while firing | 1 | ☑ |
+| Touchpad mode end-to-end test | 1 | ☑ |
 
 ### Milestone 9 – Deploy
 | Item | Status |
@@ -278,3 +280,25 @@ Status: ☐ open, ☑ done (verified by running it), ◐ partial (see notes).
 
 - **M0** (this file): tagged `v1-before-upgrade`, inspected both GLBs, confirmed `bpy`, `toktx`,
   meshoptimizer, recast and three-mesh-bvh are installable, captured before-shots, wrote the plan.
+- **M1** feel and fixes. Screenshots in [`screenshots/upgrade-m1/`](screenshots/upgrade-m1/).
+  - *Why the scope looked faded*: the shooter's own muzzle smoke spawned 0.6 m in front of the
+    camera and drifted through the lens; a 0.35 m HDR muzzle-flash sprite bloomed over the sight
+    picture; tracers started 1 m in front of the eye on the sight line; grain, chromatic
+    aberration, vignette and full bloom stayed on while scoped; distance fog washed out the
+    magnified targets; and the overlay faded in with an opacity ramp. All fixed: no flash or
+    smoke through a scope, local smoke pushed out of the sight picture, post effects fade with
+    ADS, fog thins through the scope, hard-edged mask with an SVG duplex reticle that appears
+    instantly.
+  - Tracers are screen-space hairlines (1.6 px) with a 1.3 m streak on every 2nd-5th round, from
+    the muzzle at the hip and from 5-16 m downrange when aiming; the local muzzle flash is a
+    small sprite on the gun plus a clamped light (no more orange room flood).
+  - Balance: damage 35-40% lower (body TTK 1.5-1.8x, `npm run balance`), rounds 2:00-2:30,
+    movement ~25% faster with momentum slides, slide-jumps, coyote time and jump buffering;
+    prediction verified at 80 and 150 ms.
+  - Health regeneration from `src/data/gameplay.ts` (5 s delay, eased 3.2 s refill) in the shared
+    host step; camera feel module; directional damage flash, low-health pulse, heartbeat.
+  - Touchpad mode: separate bindings (Space fire, Shift aim), host-applied 0.45x hip spread and
+    hit forgiveness, aim assist, sensitivity curve/smoothing, arrow look, auto sprint, first-launch
+    hint, mode saved with the account (Firestore rule + test).
+  - Verified: 80 unit tests, 22 rules tests, e2e (two-tab WebRTC match, touchpad mode, online
+    accounts/party/matchmaking/XP against the emulators), typecheck, lint, production build.

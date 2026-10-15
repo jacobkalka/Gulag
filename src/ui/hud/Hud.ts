@@ -98,7 +98,7 @@ export class Hud {
     this.markers = el('div', 'hud-markers', this.root);
     this.captions = el('div', 'hud-captions', this.root);
     this.nums = el('div', 'hud-nums', this.root);
-    this.scope = el('div', 'hud-scope', this.root, '<div class="hud-scope-reticle"></div>');
+    this.scope = el('div', 'hud-scope', this.root, `<div class="hud-scope-rim"></div><svg class="hud-scope-reticle" viewBox="-100 -100 200 200" aria-hidden="true">  <g stroke="#060606" stroke-linecap="butt" fill="none">    <path d="M-100 0H-34M34 0H100M0 -100V-34M0 34V100" stroke-width="2.6"/>    <path d="M-34 0H-1.6M1.6 0H34M0 -34V-1.6M0 1.6V34" stroke-width="0.55"/>    <path d="M-25 -2.2V2.2M-17 -1.6V1.6M-8.5 -1.6V1.6M8.5 -1.6V1.6M17 -1.6V1.6M25 -2.2V2.2M-2.2 8.5H2.2M-1.6 17H1.6M-2.2 25H2.2" stroke-width="0.5"/>  </g>  <circle r="0.7" fill="#d1271b"/></svg>`);
     // health
     this.hpBox = el('div', 'hud-hp', this.root);
     el('div', 'hud-hp-label', this.hpBox, 'VITALS');
@@ -364,8 +364,10 @@ export class Hud {
     if (this.scoreboard.innerHTML !== html) this.scoreboard.innerHTML = html;
   }
 
+  /** Scope overlay: dark only outside the lens; appears instantly (no fade across the view). */
   setScope(visible: boolean): void {
-    this.scope.style.opacity = visible ? '1' : '0';
+    const on = visible ? '1' : '';
+    if (this.scope.dataset.on !== on) this.scope.dataset.on = on;
   }
 
   setPerf(fps: number, ping: number): void {

@@ -117,7 +117,7 @@ export class ClientSession implements MatchSession {
     this.world = o.world ?? CollisionWorld.fromMap(o.map, pl.rules.mapTags);
     this.now = o.now ?? (() => performance.now());
     for (const info of o.start.players) {
-      const p = makePlayer({ id: info.id, team: info.team, name: info.name, bot: info.bot, loadout: info.loadout });
+      const p = makePlayer({ id: info.id, team: info.team, name: info.name, bot: info.bot, loadout: info.loadout, touchpad: info.touchpad });
       p.alive = false;
       this.players.push(p);
     }
@@ -201,6 +201,12 @@ export class ClientSession implements MatchSession {
 
   setLoadout(l: Loadout): void {
     this.o.sendR({ t: 'loadout', loadout: l });
+  }
+
+  setTouchpad(on: boolean): void {
+    const me = this.players.find((p) => p.id === this.localId);
+    if (me) me.touchpad = on;
+    this.o.sendR({ t: 'mode', touchpad: on });
   }
 
   ping(): number {
@@ -323,7 +329,7 @@ export class ClientSession implements MatchSession {
     const ev = out ?? this.scratch;
     const fire = stepPlayerCore(p, inp, this.world, frozen, combat, now, ev);
     if (fire && out) this.traceLocalShot(p, fire, out);
-    finishPlayerStep(p, inp, this.rules);
+    finishPlayerStep(p, inp);
     if (!out) this.scratch.length = 0;
   }
 

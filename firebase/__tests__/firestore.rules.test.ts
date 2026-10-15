@@ -108,6 +108,16 @@ describe('profiles', () => {
     await seedProfile('bob', 'Bob', 'XYZ234', LEVEL_XP[50]);
     await assertSucceeds(updateDoc(doc(db('bob'), 'users', 'bob'), { loadout: { primary: 'vigil', secondary: 'wasp', lethal: 'frag', tactical: 'flash' }, updatedAt: serverTimestamp() }));
   });
+  it('preferences: only a known input mode can be stored', async () => {
+    await seedProfile('alice', 'Alice', 'ABC234');
+    const f = db('alice');
+    await assertSucceeds(updateDoc(doc(f, 'users', 'alice'), { prefs: { inputMode: 'touchpad' }, updatedAt: serverTimestamp() }));
+    await assertSucceeds(updateDoc(doc(f, 'users', 'alice'), { prefs: { inputMode: 'mouse' }, updatedAt: serverTimestamp() }));
+    await assertFails(updateDoc(doc(f, 'users', 'alice'), { prefs: { inputMode: 'aimbot' }, updatedAt: serverTimestamp() }));
+    await assertFails(updateDoc(doc(f, 'users', 'alice'), { prefs: { inputMode: 'mouse', xp: 9 }, updatedAt: serverTimestamp() }));
+    await assertFails(updateDoc(doc(f, 'users', 'alice'), { prefs: 'touchpad', updatedAt: serverTimestamp() }));
+    await assertFails(updateDoc(doc(db('bob'), 'users', 'alice'), { prefs: { inputMode: 'mouse' }, updatedAt: serverTimestamp() }));
+  });
   it('renaming claims the new name and releases the old one', async () => {
     await seedProfile('alice', 'Alice', 'ABC234');
     const f = db('alice');

@@ -1,4 +1,4 @@
-import { getWeapon, type WeaponStats } from '@/data/weapons';
+import { getWeapon, touchpadHipMul, type WeaponStats } from '@/data/weapons';
 import { DEG } from '@/shared/math';
 import { BTN, type GameEvent, type PlayerInput, type PlayerState } from './types';
 import { MOVE } from './movement';
@@ -28,11 +28,15 @@ function edge(inp: PlayerInput, p: PlayerState, b: number): boolean {
 /** Cone half-angle in degrees for the next shot. */
 export function currentSpread(p: PlayerState, w: WeaponStats): number {
   const speed = Math.hypot(p.vx, p.vz);
-  let s = w.hipSpread + (w.adsSpread - w.hipSpread) * p.ads;
-  s += w.moveSpread * Math.min(1, speed / MOVE.walk) * (1 - p.ads * 0.6);
-  s += p.bloom;
-  if (!p.grounded) s += 2.5 * (1 - p.ads * 0.5);
-  if (p.slideT > 0) s += 1.5;
+  // hip-fire part (scaled down for touchpad players) blended toward the ADS cone
+  let hip = w.hipSpread + w.moveSpread * Math.min(1, speed / MOVE.walk) + p.bloom;
+  if (!p.grounded) hip += 2.5;
+  if (p.slideT > 0) hip += 1.5;
+  if (p.touchpad) hip *= touchpadHipMul();
+  let ads = w.adsSpread + w.moveSpread * Math.min(1, speed / MOVE.walk) * 0.4 + p.bloom;
+  if (!p.grounded) ads += 1.25;
+  if (p.slideT > 0) ads += 1.5;
+  let s = hip + (ads - hip) * p.ads;
   s *= 1 - p.crouch * 0.15;
   return Math.max(0, s);
 }

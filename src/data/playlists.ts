@@ -16,9 +16,6 @@ export interface MatchRules {
   captureTime: number;
   captureRadius: number;
   spawnProtection: number;
-  /** Health regeneration delay and rate. */
-  regenDelay: number;
-  regenRate: number;
   /** Map tags to activate (e.g. shutters that tighten the arena for 1v1). */
   mapTags: string[];
   friendlyFire: boolean;
@@ -34,15 +31,13 @@ export interface Playlist {
 }
 
 const base: Omit<MatchRules, 'teamSize' | 'roundsToWin' | 'mapTags'> = {
-  roundTime: 90,
+  roundTime: 135,
   countdown: 4,
-  overtimeLimit: 45,
+  overtimeLimit: 60,
   roundEndDelay: 4.5,
-  captureTime: 5,
-  captureRadius: 2.5,
+  captureTime: 6,
+  captureRadius: 2.75,
   spawnProtection: 3,
-  regenDelay: 4.5,
-  regenRate: 30,
   friendlyFire: false,
   loadoutBetweenRounds: true,
 };
@@ -52,7 +47,7 @@ export const PLAYLISTS: Record<PlaylistId, Playlist> = {
     id: '1v1',
     name: 'Duel',
     description: '1v1. Best of 3. Side rooms sealed for a tighter fight.',
-    rules: { ...base, teamSize: 1, roundsToWin: 2, mapTags: ['shutter1v1'], roundTime: 75 },
+    rules: { ...base, teamSize: 1, roundsToWin: 2, mapTags: ['shutter1v1'], roundTime: 120 },
   },
   '2v2': {
     id: '2v2',
@@ -70,7 +65,7 @@ export const PLAYLISTS: Record<PlaylistId, Playlist> = {
     id: '4v4',
     name: 'Riot',
     description: '4v4. First to 3 rounds. Full map.',
-    rules: { ...base, teamSize: 4, roundsToWin: 3, mapTags: [], roundTime: 100 },
+    rules: { ...base, teamSize: 4, roundsToWin: 3, mapTags: [], roundTime: 150 },
   },
 };
 
