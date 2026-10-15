@@ -104,6 +104,10 @@ Pipeline as built (`tools/soldiers/build.sh`: Node + Blender `bpy` headless, see
   oriented boxes, cylinders, ramps and multi-level floors, with a uniform-grid broadphase. Bots move
   from the 2D grid to a **Recast navmesh** (`recast-navigation`, WASM, works in Node), generated from
   each map's collision geometry and cached.
+  *Changed in M5:* the existing nav grid turned out to be multi-level already (0.5 m cells, several
+  floors per cell, A*, path smoothing, cover spots). It now samples basements and catwalks and
+  labels connected areas, so it does the navmesh's job without WASM. It builds in about 0.3 s for
+  the 72 m x 48 m map and runs in the headless sims.
 - **Lighting budget**: a pool of 2 / 4 / 6 / 8 shadowed lights (Low/Medium/High/Ultra), reassigned to
   the most important fixtures near the camera with smooth fades. Unshadowed point lights and fake
   volumetric cones cover the rest. Static AO and bounce are baked at load (BVH ray casts into vertex AO
@@ -169,18 +173,18 @@ Status: ☐ open, ☑ done (verified by running it), ◐ partial (see notes).
 ### Section 2 – Maps
 | Item | M | Status |
 |---|---|---|
-| 2A ~2x indoor area, larger outdoor; 1v1 contact in 20-30 s; lanes, loops, flanks | 5-7 | ☐ |
-| 2A Real elevation and multi-level spaces, mantle-able cover | 5-7 | ☐ |
-| 2A Distinct zones and landmarks, signage, callouts on spawn | 5-7 | ☐ |
-| 2A Cover at three heights, peeks, shortcuts, mixed engagement ranges, fair | 5-7 | ☐ |
-| 2A Overtime capture point at a contested location on each map | 5-7 | ☐ |
-| 2A Spawns for 1v1 to 4v4+, spawn protection, safe distance | 5-7 | ☐ |
-| 2A Spatial structure for collision and raycasts | 5 | ☐ |
-| 2A Navmesh per map; bots path, use cover, peek, flank, never stuck | 5-7 | ☐ |
-| 2A Headless bot-vs-bot sims per map (stuck spots, unreachable areas, ~50/50 sides) | 5-7 | ☐ |
+| 2A ~2x indoor area, larger outdoor; 1v1 contact in 20-30 s; lanes, loops, flanks | 5-7 | ◐ Map 1: 72x48 m on 3 levels, five routes, bot first contact about 4-5 s |
+| 2A Real elevation and multi-level spaces, mantle-able cover | 5-7 | ◐ Map 1: cistern -2.8 m, catwalks/balconies/gallery +3.2 m, trench, ramps, crates |
+| 2A Distinct zones and landmarks, signage, callouts on spawn | 5-7 | ◐ Map 1: 25 zones, each with its own light; HUD names the zone on spawn and on entry |
+| 2A Cover at three heights, peeks, shortcuts, mixed engagement ranges, fair | 5-7 | ◐ Map 1 (see docs/maps/sublevel9.md) |
+| 2A Overtime capture point at a contested location on each map | 5-7 | ◐ Map 1: cistern floor under the collapse |
+| 2A Spawns for 1v1 to 4v4+, spawn protection, safe distance | 5-7 | ◐ Map 1: 8 per side, 66 m apart |
+| 2A Spatial structure for collision and raycasts | 5 | ☑ uniform 2 m grid broadphase (raycasts walk it with DDA); nav for the big map builds in about 0.3 s |
+| 2A Navmesh per map; bots path, use cover, peek, flank, never stuck | 5-7 | ◐ Map 1: multi-level nav grid (see decisions), five routes per round, re-plan after falls, 0 stuck in soak |
+| 2A Headless bot-vs-bot sims per map (stuck spots, unreachable areas, ~50/50 sides) | 5-7 | ◐ `npm run botsim`; Map 1 results in docs/maps/sublevel9-botsim.md |
 | 2A Map select (leader picks or Random), preview and description, synced via party and matchmaking | 8 | ☐ |
-| 2A `docs/maps/<name>.md` design docs | 5-7 | ☐ |
-| 2B Map 1: bigger, multi-level bunker, flooded section, catwalks, drainage, boiler room, irregular yet fair | 5 | ☐ |
+| 2A `docs/maps/<name>.md` design docs | 5-7 | ◐ docs/maps/sublevel9.md |
+| 2B Map 1: bigger, multi-level bunker, flooded section, catwalks, drainage, boiler room, irregular yet fair | 5 | ☑ |
 | 2C Map 2: tropical jungle base at night in rain (see the user's references: buttress trees with vines, tree ferns, palms, fern carpet, boardwalks) | 6 | ☐ |
 | 2D Map 3: snowy base at night, snow flying, drifts, hangar, radar dome | 7 | ☐ |
 
@@ -217,15 +221,15 @@ Status: ☐ open, ☑ done (verified by running it), ◐ partial (see notes).
 ### Section 5 – Audio
 | Item | M | Status |
 |---|---|---|
-| Layered gunshots (transient, body, thump, tail), variations, class-distinct | 4 | ☐ |
-| Convolution reverb per environment; distance low-pass and delay; occlusion | 4 | ☐ |
-| Supersonic cracks, per-material impacts, casings, ricochets | 4 | ☐ |
-| Per-surface foley (footsteps, slide, landing, cloth, reload, mantle) | 4 | ☐ |
-| Weighty hit/kill feedback, heartbeat/breathing when hurt, muffled hearing | 4 | ☐ |
-| Master limiter/compressor; buses: master, effects, music, voice/UI, ambience; ducked music | 4 | ☐ |
-| Per-map ambience beds | 4, 6, 7 | ☐ |
-| `?audiotest` page | 4 | ☐ |
-| Sources recorded in CREDITS.md | 4 | ☐ |
+| Layered gunshots (transient, body, thump, tail), variations, class-distinct | 4 | skipped (user: audio is fine) |
+| Convolution reverb per environment; distance low-pass and delay; occlusion | 4 | skipped (user) |
+| Supersonic cracks, per-material impacts, casings, ricochets | 4 | skipped (user) |
+| Per-surface foley (footsteps, slide, landing, cloth, reload, mantle) | 4 | skipped (user); water footsteps added for flooded areas |
+| Weighty hit/kill feedback, heartbeat/breathing when hurt, muffled hearing | 4 | skipped (user) |
+| Master limiter/compressor; buses: master, effects, music, voice/UI, ambience; ducked music | 4 | skipped (user) |
+| Per-map ambience beds | 4, 6, 7 | skipped (user) |
+| `?audiotest` page | 4 | skipped (user) |
+| Sources recorded in CREDITS.md | 4 | n/a: no new audio sources |
 
 ### Section 6 – Controls
 | Item | M | Status |
@@ -344,3 +348,42 @@ Status: ☐ open, ☑ done (verified by running it), ◐ partial (see notes).
   - Verified: lint, typecheck, 87 unit tests, production build, `audit:textures`, e2e two-tab
     networked round (twice in a row) and touchpad mode pass; every animtest state checked in
     screenshots ([`animtest-sheet.jpg`](screenshots/upgrade-m3/animtest-sheet.jpg)).
+- **M4** audio overhaul: skipped at the user's request ("skip the audio section its fine"). The
+  only audio change is splashing footsteps in the new flooded areas.
+- **M5** Map 1 rework. Design doc [`docs/maps/sublevel9.md`](docs/maps/sublevel9.md); screenshots in
+  [`screenshots/upgrade-m5/`](screenshots/upgrade-m5/).
+  - Sublevel 9 is now 72 m x 48 m on three levels, about twice the old floor area:
+    - the flooded cistern and drains at -2.8 m;
+    - the main floor;
+    - catwalks, balconies, the cell gallery and the gantry at +3.2 m.
+
+    The old shower block collapsed into the cistern; the overtime objective is on the cistern
+    floor. Rooms added: generator rooms, infirmaries, a two-tier cell block, a boiler hall with a
+    drainage trench. 25 named zones, each with its own light; the HUD names the zone on spawn and
+    on entry. 1v1 shutters seal the four outer rooms.
+  - Engine: a shared map builder for maps 2 and 3, with wall bases and sills, stairs, railings,
+    catwalks, water, zones and bot points. Stairs are drawn as steps over a smooth collision
+    slope. Water surfaces, render chunks sized from the map bounds, slab undersides visible from
+    below, probes that reach below 0, a per-map reflection probe and menu stage, and a map
+    registry.
+  - Bots: the nav grid now samples basements and walkways (fixed: it never searched more than
+    2 m down) and labels connected areas. Points of interest come from the map. Each round,
+    teammates spread over five routes and both sides take mirrored ones. Bots re-plan after
+    falling off their route, and treat the end of a path as arrived.
+  - `npm run botsim` plays headless bot matches and reports side wins, first contact, stuck bots,
+    fight zones and unvisited areas. Over 174 rounds: 0 stuck, sides 54%/46%, every zone at
+    least half visited on the full map. Results: [`docs/maps/sublevel9-botsim.md`](docs/maps/sublevel9-botsim.md).
+  - New test: every prop and map material is built in a unit test. A typo in a material name
+    only showed up as a crash in the browser before.
+  - Lighting: the bigger rooms first rendered too dark (8 of 9 cameras failed the contrast
+    audit). Added fixtures where light was missing:
+    - hanging pendants in the boiler hall and cell block, plus a lower cell block ceiling;
+    - tubes under the catwalk;
+    - lamps over the balconies, in the cistern crawl spaces and on the pump riser;
+    - more lockers and spawn-room lighting.
+
+    Two art cameras were reframed (one sat behind a pillar).
+  - Verified so far: lint, typecheck, 133 unit tests, the bot soak and `npm run botsim`,
+    `audit:shadows` and `audit:textures` pass. `audit:contrast` passed 8/9; the spawn room was at
+    35.1% near-black against a 35% limit before its last light tweak. The final contrast and e2e
+    runs are recorded in the next entry.

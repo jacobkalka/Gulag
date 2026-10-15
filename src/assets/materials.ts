@@ -88,6 +88,11 @@ const DEFS: Record<string, MatDef> = {
 
 export type MaterialName = keyof typeof DEFS;
 
+/** True if the library defines a material with this name (props and maps refer to them by string). */
+export function hasMaterial(name: string): boolean {
+  return name in DEFS;
+}
+
 /** Global specular reflection strength for library (dielectric) materials. */
 export const ENV_SCALE = 0.5;
 /** Architecture: gets world-space macro variation and map wetness (see engine/surfaceFx). */

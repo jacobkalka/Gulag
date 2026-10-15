@@ -4,7 +4,8 @@ import { CollisionWorld } from '@/game/world/collision';
 import { PLAYLISTS } from '@/data/playlists';
 import { DEFAULT_LOADOUT } from '@/data/progression';
 import { BTN, DT, emptyInput, type GameEvent, type PlayerInput, type PlayerState } from '@/game/sim/types';
-import { eyeHeight } from '@/game/sim/movement';
+import { MOVE, eyeHeight } from '@/game/sim/movement';
+import { activeWeapon } from '@/game/sim/weaponLogic';
 import type { ClientSession } from '@/game/session/ClientSession';
 import type { HostSession } from '@/game/session/HostSession';
 import { NetHost } from '../NetHost';
@@ -18,6 +19,8 @@ const map = buildSublevel9();
 const world1v1 = CollisionWorld.fromMap(map, PLAYLISTS['1v1'].rules.mapTags);
 
 const GOOD: NetConditions = { latency: 50, jitter: 12, loss: 0.05 };
+/** Intake A, south end: nothing in the way for 14 m north and 3 m to either side. */
+const LANE = { x: -29.5, z: -7 };
 
 interface Ctx {
   net: SimNetwork;
@@ -100,8 +103,8 @@ describe('netplay over a simulated network', () => {
   it('predicts the local player identically to the host (small corrections only)', () => {
     const c = setup(GOOD);
     runUntil(c, () => c.hs.round.phase === 'live', 8);
-    // start in the showers facing north (+z) with room to run
-    Object.assign(c.hs.sim.player(1)!, { x: 0, y: 0, z: -4.5, vx: 0, vz: 0 });
+    // start in an intake room facing north (+z) with room to run
+    Object.assign(c.hs.sim.player(1)!, { x: LANE.x, y: 0, z: LANE.z, vx: 0, vz: 0 });
     runUntil(c, () => false, 1, () => ({}), () => ({ yaw: Math.PI }));
     let maxCorr = 0;
     // run, strafe, sprint, jump and finally slam into the north wall
@@ -117,7 +120,7 @@ describe('netplay over a simulated network', () => {
     runUntil(c, () => false, 0.7, () => ({}), () => ({ yaw: Math.PI }));
     const auth = c.hs.sim.player(1)!;
     const pred = local(c);
-    expect(auth.z).toBeGreaterThan(3); // it really moved
+    expect(auth.z).toBeGreaterThan(LANE.z + 7.5); // it really moved
     expect(Math.hypot(pred.x - auth.x, pred.z - auth.z)).toBeLessThan(0.01);
     expect(maxCorr).toBeLessThan(0.05);
   });
@@ -126,7 +129,7 @@ describe('netplay over a simulated network', () => {
     it(`no rubber-banding at ${latency} ms with the faster movement (sprint, slide, slide-jump, strafe)`, () => {
       const c = setup({ latency, jitter: latency * 0.15, loss: 0.03 }, false, 11);
       runUntil(c, () => c.hs.round.phase === 'live', 10);
-      Object.assign(c.hs.sim.player(1)!, { x: 0, y: 0, z: -4.5, vx: 0, vz: 0 });
+      Object.assign(c.hs.sim.player(1)!, { x: LANE.x, y: 0, z: LANE.z, vx: 0, vz: 0 });
       runUntil(c, () => false, 1.2, () => ({}), () => ({ yaw: Math.PI }));
       let maxCorr = 0;
       let corrSum = 0;
@@ -140,7 +143,7 @@ describe('netplay over a simulated network', () => {
       runUntil(c, () => false, 1.0, () => ({}), () => ({ yaw: Math.PI + 0.4 }));
       const auth = c.hs.sim.player(1)!;
       const pred = local(c);
-      expect(Math.hypot(auth.x, auth.z + 4.5)).toBeGreaterThan(5); // it really moved
+      expect(Math.hypot(auth.x - LANE.x, auth.z - LANE.z)).toBeGreaterThan(5); // it really moved
       expect(Math.hypot(pred.x - auth.x, pred.z - auth.z)).toBeLessThan(0.01);
       // corrections stay tiny (lost packets are re-sent redundantly, so prediction matches)
       expect(maxCorr).toBeLessThan(0.08);
@@ -163,8 +166,10 @@ describe('netplay over a simulated network', () => {
       c.net.advance(1000 / 60);
       c.hs.update(DT, () => emptyInput(++c.hseq));
     }
+    // one second of input can't carry the player further than one second at full walk speed
     const moved = Math.hypot(p.x - start.x, p.z - start.z);
-    expect(moved).toBeLessThan(4.6 * 1.05);
+    expect(moved).toBeGreaterThan(2);
+    expect(moved).toBeLessThan(MOVE.walk * activeWeapon(p).move * 1.05);
   });
 
   it('lag compensation: shots aimed at the interpolated target hit on the host', () => {
@@ -174,13 +179,13 @@ describe('netplay over a simulated network', () => {
       runUntil(c, () => false, 3.6); // spawn protection expires
       const hostP = c.hs.sim.player(0)!;
       const cliP = c.hs.sim.player(1)!;
-      // put both players in the showers with a clear lane between them
-      Object.assign(cliP, { x: 0, y: 0, z: -4.5, vx: 0, vz: 0 });
-      Object.assign(hostP, { x: 0, y: 0, z: 3.5, vx: 0, vz: 0 });
+      // put both players in an intake room with a clear lane between them
+      Object.assign(cliP, { x: LANE.x, y: 0, z: LANE.z + 2.5, vx: 0, vz: 0 });
+      Object.assign(hostP, { x: LANE.x, y: 0, z: LANE.z + 10.5, vx: 0, vz: 0 });
       let dir = 1;
       const hostIn = (): Partial<PlayerInput> => {
-        if (hostP.x > 1.3) dir = -1;
-        if (hostP.x < -1.3) dir = 1;
+        if (hostP.x > LANE.x + 1.3) dir = -1;
+        if (hostP.x < LANE.x - 1.3) dir = 1;
         hostP.hp = 100;
         return { mx: dir, yaw: 0 };
       };
@@ -221,8 +226,8 @@ describe('netplay over a simulated network', () => {
     runUntil(c, () => false, 3.6);
     const hostP = c.hs.sim.player(0)!;
     const cliP = c.hs.sim.player(1)!;
-    Object.assign(cliP, { x: 0, y: 0, z: -4.5 });
-    Object.assign(hostP, { x: 0, y: 0, z: 3.5 });
+    Object.assign(cliP, { x: LANE.x, y: 0, z: LANE.z + 2.5 });
+    Object.assign(hostP, { x: LANE.x, y: 0, z: LANE.z + 10.5 });
     let f = 0;
     // the host shoots at the (stationary) client
     runUntil(

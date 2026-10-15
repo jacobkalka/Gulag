@@ -71,9 +71,11 @@ export class BakedProbes {
     const sp = opts.spacing;
     const nx = Math.min(96, Math.max(2, Math.round((b.max[0] - b.min[0]) / sp) + 1));
     const nz = Math.min(96, Math.max(2, Math.round((b.max[2] - b.min[2]) / sp) + 1));
+    // from just above the lowest floor (basements) to head height on the highest walkways
+    const bottom = Math.min(0, b.min[1] + 0.5) + 0.25;
     const top = Math.max(2.4, Math.min(b.max[1], 7.5));
-    const ny = Math.min(10, Math.max(2, Math.round((top - 0.25) / 1.1) + 1));
-    this.min.set(b.min[0], 0.25, b.min[2]);
+    const ny = Math.min(12, Math.max(2, Math.round((top - bottom) / 1.1) + 1));
+    this.min.set(b.min[0], bottom, b.min[2]);
     this.max.set(b.max[0], top, b.max[2]);
     this.res.set(nx, ny, nz);
     const n = nx * ny * nz;

@@ -48,7 +48,7 @@ function tri(b: Bucket, a: number[], bb: number[], c: number[], n: number[], uvs
   }
 }
 
-function brushFaces(br: Brush, buckets: Map<string, Bucket>, shadowKey: string): void {
+function brushFaces(br: Brush, buckets: Map<string, Bucket>, shadowKey: string, lowestY: number): void {
   const [x0, y0, z0] = br.min;
   const [x1, y1, z1] = br.max;
   const side = br.sides ?? br.mat;
@@ -65,11 +65,66 @@ function brushFaces(br: Brush, buckets: Map<string, Bucket>, shadowKey: string):
   quad(bucket(buckets, k(side)), [x1, y0, z0], [x0, y0, z0], [x0, y1, z0], [x1, y1, z0], [0, 0, -1], [[-x1, y0], [-x0, y0], [-x0, y1], [-x1, y1]]);
   // +Y (top)
   quad(bucket(buckets, k(topM)), [x0, y1, z1], [x1, y1, z1], [x1, y1, z0], [x0, y1, z0], [0, 1, 0], [[x0, -z1], [x1, -z1], [x1, -z0], [x0, -z0]]);
-  // -Y (bottom) - skip for floor-resting brushes
-  if (y0 > 0.01) quad(bucket(buckets, k(botM)), [x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1], [0, -1, 0], [[x0, z0], [x1, z0], [x1, z1], [x0, z1]]);
+  // -Y (bottom): skipped only for brushes sunk into the lowest floor (seen from below everywhere else)
+  if (y0 > lowestY + 0.01) quad(bucket(buckets, k(botM)), [x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1], [0, -1, 0], [[x0, z0], [x1, z0], [x1, z1], [x0, z1]]);
+}
+
+/**
+ * Steps for a staircase ramp. The tops sit half a step below/above the walked slope so feet
+ * never float or sink by more than half a riser.
+ */
+function stairFaces(r: Ramp, buckets: Map<string, Bucket>): void {
+  const [x0, y0, z0] = r.min;
+  const [x1, y1, z1] = r.max;
+  const B = bucket(buckets, `${r.mat}|shadow`);
+  const along = r.axis === 'x' ? x1 - x0 : z1 - z0;
+  const n = Math.max(2, Math.round((y1 - y0) / 0.2));
+  const h = (y1 - y0) / n;
+  const w = along / n;
+  for (let i = 0; i < n; i++) {
+    const top = y0 + (i + 0.5) * h + h * 0.5 * (i === n - 1 ? 1 : 0);
+    const lowEdge = y0 + Math.max(0, i - 0.5) * h;
+    // run segment of this step along the axis, starting at the low end
+    const a = r.dir > 0 ? (r.axis === 'x' ? x0 : z0) + i * w : (r.axis === 'x' ? x1 : z1) - (i + 1) * w;
+    const b = a + w;
+    if (r.axis === 'x') {
+      quad(B, [a, top, z1], [b, top, z1], [b, top, z0], [a, top, z0], [0, 1, 0], [[a, -z1], [b, -z1], [b, -z0], [a, -z0]]);
+      const rx = r.dir > 0 ? a : b;
+      const rn = r.dir > 0 ? -1 : 1;
+      if (rn < 0) quad(B, [rx, lowEdge, z0], [rx, lowEdge, z1], [rx, top, z1], [rx, top, z0], [-1, 0, 0], [[z0, lowEdge], [z1, lowEdge], [z1, top], [z0, top]]);
+      else quad(B, [rx, lowEdge, z1], [rx, lowEdge, z0], [rx, top, z0], [rx, top, z1], [1, 0, 0], [[-z1, lowEdge], [-z0, lowEdge], [-z0, top], [-z1, top]]);
+      quad(B, [a, y0, z1], [b, y0, z1], [b, top, z1], [a, top, z1], [0, 0, 1], [[a, y0], [b, y0], [b, top], [a, top]]);
+      quad(B, [b, y0, z0], [a, y0, z0], [a, top, z0], [b, top, z0], [0, 0, -1], [[-b, y0], [-a, y0], [-a, top], [-b, top]]);
+    } else {
+      quad(B, [x0, top, b], [x1, top, b], [x1, top, a], [x0, top, a], [0, 1, 0], [[x0, -b], [x1, -b], [x1, -a], [x0, -a]]);
+      const rz = r.dir > 0 ? a : b;
+      const rn = r.dir > 0 ? -1 : 1;
+      if (rn < 0) quad(B, [x1, lowEdge, rz], [x0, lowEdge, rz], [x0, top, rz], [x1, top, rz], [0, 0, -1], [[-x1, lowEdge], [-x0, lowEdge], [-x0, top], [-x1, top]]);
+      else quad(B, [x0, lowEdge, rz], [x1, lowEdge, rz], [x1, top, rz], [x0, top, rz], [0, 0, 1], [[x0, lowEdge], [x1, lowEdge], [x1, top], [x0, top]]);
+      quad(B, [x1, y0, b], [x1, y0, a], [x1, top, a], [x1, top, b], [1, 0, 0], [[-b, y0], [-a, y0], [-a, top], [-b, top]]);
+      quad(B, [x0, y0, a], [x0, y0, b], [x0, top, b], [x0, top, a], [-1, 0, 0], [[a, y0], [b, y0], [b, top], [a, top]]);
+    }
+  }
+  // back face behind the top step
+  const tb = y1;
+  if (r.axis === 'x') {
+    const bx = r.dir > 0 ? x1 : x0;
+    const nx = r.dir > 0 ? 1 : -1;
+    if (nx > 0) quad(B, [bx, y0, z1], [bx, y0, z0], [bx, tb, z0], [bx, tb, z1], [1, 0, 0], [[-z1, y0], [-z0, y0], [-z0, tb], [-z1, tb]]);
+    else quad(B, [bx, y0, z0], [bx, y0, z1], [bx, tb, z1], [bx, tb, z0], [-1, 0, 0], [[z0, y0], [z1, y0], [z1, tb], [z0, tb]]);
+  } else {
+    const bz = r.dir > 0 ? z1 : z0;
+    const nz = r.dir > 0 ? 1 : -1;
+    if (nz > 0) quad(B, [x0, y0, bz], [x1, y0, bz], [x1, tb, bz], [x0, tb, bz], [0, 0, 1], [[x0, y0], [x1, y0], [x1, tb], [x0, tb]]);
+    else quad(B, [x1, y0, bz], [x0, y0, bz], [x0, tb, bz], [x1, tb, bz], [0, 0, -1], [[-x1, y0], [-x0, y0], [-x0, tb], [-x1, tb]]);
+  }
 }
 
 function rampFaces(r: Ramp, buckets: Map<string, Bucket>): void {
+  if (r.steps) {
+    stairFaces(r, buckets);
+    return;
+  }
   const [x0, y0, z0] = r.min;
   const [x1, y1, z1] = r.max;
   const B = bucket(buckets, `${r.mat}|shadow`);
@@ -138,6 +193,7 @@ export class MapView {
   readonly wetMask: WetMask;
   /** Materials created here rather than in the library (decals, puddles, signs). */
   private ownMats: THREE.MeshStandardMaterial[] = [];
+  private waterNormal: THREE.Texture | null = null;
 
   constructor(map: MapDef, lib: MaterialLibrary, quality: QualityPreset, opts: { activeTags?: string[]; world?: CollisionWorld } = {}) {
     this.map = map;
@@ -146,7 +202,15 @@ export class MapView {
     // Static geometry is merged into per-(material, zone chunk, shadow) batches so the whole
     // map draws in roughly (materials x 9) calls while keeping coarse frustum culling.
     const batches = new Map<string, { mat: THREE.Material; cast: boolean; exempt: string; geos: THREE.BufferGeometry[] }>();
-    const chunkOf = (x: number, z: number) => (z < -6 ? 0 : z > 6 ? 2 : 1) * 3 + (x < -9 ? 0 : x > 9 ? 2 : 1);
+    // coarse culling chunks: about 18 m squares over the map bounds
+    const [bx0, by0, bz0] = map.bounds.min;
+    const ncx = Math.max(1, Math.round((map.bounds.max[0] - bx0) / 18));
+    const ncz = Math.max(1, Math.round((map.bounds.max[2] - bz0) / 18));
+    const chunkOf = (x: number, z: number) => {
+      const cx = Math.min(ncx - 1, Math.max(0, Math.floor(((x - bx0) / (map.bounds.max[0] - bx0)) * ncx)));
+      const cz = Math.min(ncz - 1, Math.max(0, Math.floor(((z - bz0) / (map.bounds.max[2] - bz0)) * ncz)));
+      return cz * ncx + cx;
+    };
     const addGeo = (mat: THREE.Material, cast: boolean, chunk: number, g: THREE.BufferGeometry, exempt = '') => {
       const key = `${mat.uuid}|${chunk}|${cast ? 1 : 0}|${exempt}`;
       let b = batches.get(key);
@@ -158,7 +222,7 @@ export class MapView {
       if (br.visible === false) continue;
       if (br.tag && !tags.has(br.tag)) continue;
       const buckets = new Map<string, Bucket>();
-      brushFaces(br, buckets, br.shadow === false ? 'noshadow' : 'shadow');
+      brushFaces(br, buckets, br.shadow === false ? 'noshadow' : 'shadow', by0);
       const chunk = chunkOf((br.min[0] + br.max[0]) / 2, (br.min[2] + br.max[2]) / 2);
       for (const [key, b] of buckets) addGeo(lib.get(key.split('|')[0]), br.shadow !== false, chunk, bucketGeo(b), br.shadow === false ? 'brush flagged shadow:false (see map data)' : '');
     }
@@ -232,6 +296,8 @@ export class MapView {
       pm.userData.shadowExempt = 'decal: puddles receive shadows, a flat film never casts';
       this.root.add(pm);
     }
+    // ---- standing water (flooded rooms)
+    if (map.water?.length) this.buildWater(map);
     // ---- grime, streaks, stains: seeded so every player sees the same wear
     const world = opts.world ?? CollisionWorld.fromMap(map, [...tags]);
     // ---- loose clutter along the walls (seeded, view only), merged like the props
@@ -348,6 +414,48 @@ export class MapView {
     return mesh;
   }
 
+  private buildWater(map: MapDef): void {
+    const t = puddleTextures();
+    const normal = t.normalMap.clone();
+    normal.wrapS = normal.wrapT = THREE.RepeatWrapping;
+    normal.repeat.set(0.35, 0.35);
+    normal.needsUpdate = true;
+    this.waterNormal = normal;
+    const mat = new THREE.MeshStandardMaterial({
+      name: 'water',
+      color: 0x16201e,
+      roughness: 0.06,
+      metalness: 0,
+      normalMap: normal,
+      normalScale: new THREE.Vector2(0.18, 0.18),
+      transparent: true,
+      opacity: 0.72,
+      depthWrite: false,
+      envMapIntensity: 1.5,
+    });
+    mat.userData.textureExempt = 'water: a dark reflective film, its look comes from the normal map and reflections';
+    this.ownMats.push(mat);
+    const geos: THREE.BufferGeometry[] = [];
+    for (const w of map.water ?? []) {
+      const sx = w.max[0] - w.min[0];
+      const sz = w.max[2] - w.min[2];
+      const g = new THREE.PlaneGeometry(sx, sz, 1, 1);
+      g.rotateX(-Math.PI / 2);
+      // world-space UVs so the ripples line up across volumes
+      const uv = g.getAttribute('uv') as THREE.BufferAttribute;
+      const pos = g.getAttribute('position') as THREE.BufferAttribute;
+      g.translate((w.min[0] + w.max[0]) / 2, w.max[1], (w.min[2] + w.max[2]) / 2);
+      for (let i = 0; i < uv.count; i++) uv.setXY(i, pos.getX(i), -pos.getZ(i));
+      geos.push(g);
+    }
+    const mesh = new THREE.Mesh(mergeGeos(geos), mat);
+    mesh.name = 'water';
+    mesh.renderOrder = 2;
+    mesh.receiveShadow = true;
+    mesh.userData.shadowExempt = 'water surface: receives shadows, a film never casts';
+    this.root.add(mesh);
+  }
+
   /** Reflection probe for the decals, puddles and signs built here (library materials get it from the library). */
   setEnvMap(env: THREE.Texture | null): void {
     for (const m of this.ownMats) {
@@ -358,6 +466,8 @@ export class MapView {
 
   update(camera: THREE.Camera, t: number, dt: number): void {
     bindWetMask(this.wetMask);
+    // slow drift on the standing water
+    if (this.waterNormal) this.waterNormal.offset.set(t * 0.011, t * 0.007);
     this.lights.update(camera.position, t, dt, camera.getWorldDirection(this.camDir));
     this.atmosphere.update(t);
   }

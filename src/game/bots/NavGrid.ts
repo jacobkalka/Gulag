@@ -79,17 +79,22 @@ class Heap {
 export class NavGrid {
   readonly nodes: NavNode[] = [];
   readonly cover: CoverSpot[] = [];
+  /** Connected component of each node (areas sealed off by playlist shutters get their own). */
+  comp = new Int32Array(0);
   private byCell = new Map<number, number[]>();
   readonly minX: number;
   readonly minZ: number;
   readonly nx: number;
   readonly nz: number;
 
-  constructor(readonly world: CollisionWorld, map: MapDef, maxWalkY = 3.3) {
+  private bottomY: number;
+
+  constructor(readonly world: CollisionWorld, map: MapDef, maxWalkY = map.navTopY ?? 3.3) {
     this.minX = Math.floor(map.bounds.min[0]);
     this.minZ = Math.floor(map.bounds.min[2]);
     this.nx = Math.ceil((map.bounds.max[0] - this.minX) / CELL) + 1;
     this.nz = Math.ceil((map.bounds.max[2] - this.minZ) / CELL) + 1;
+    this.bottomY = Math.min(-0.5, map.bounds.min[1]);
     // Nothing walkable exists above the catwalks; sampling from just above them skips
     // roofs and ceiling plenums entirely.
     this.build(maxWalkY);
@@ -111,7 +116,8 @@ export class NavGrid {
         const z = this.minZ + cz * CELL;
         let probe = topY;
         for (let layer = 0; layer < 8; layer++) {
-          const s = w.supportHeight(x, z, NAV_R, probe, 0, probe + 2);
+          // search all the way down to the lowest floor (basements below 0)
+          const s = w.supportHeight(x, z, NAV_R, probe, 0, probe - this.bottomY + 0.5);
           if (s.y === -Infinity) break;
           const y = s.y;
           if (!w.cylinderBlocked(x, y + 0.05, z, NAV_R, 1.65)) {
@@ -123,7 +129,7 @@ export class NavGrid {
             else this.byCell.set(k, [id]);
           }
           probe = y - 0.9;
-          if (probe < -0.5) break;
+          if (probe < this.bottomY) break;
         }
       }
     }
@@ -145,7 +151,8 @@ export class NavGrid {
         }
       }
     }
-    this.pruneIslands(40);
+    this.pruneIslands(80);
+    this.labelComponents();
     // clearance: BFS distance (in cells) from nodes with missing neighbors
     const dist = new Int32Array(this.nodes.length).fill(-1);
     const q: number[] = [];
@@ -207,6 +214,31 @@ export class NavGrid {
       if (list) list.push(n.id);
       else this.byCell.set(k, [n.id]);
     }
+  }
+
+  private labelComponents(): void {
+    this.comp = new Int32Array(this.nodes.length).fill(-1);
+    let c = 0;
+    for (const n of this.nodes) {
+      if (this.comp[n.id] >= 0) continue;
+      const stack = [n.id];
+      this.comp[n.id] = c;
+      while (stack.length) {
+        const id = stack.pop()!;
+        for (const l of this.nodes[id].links) {
+          if (this.comp[l] < 0) {
+            this.comp[l] = c;
+            stack.push(l);
+          }
+        }
+      }
+      c++;
+    }
+  }
+
+  /** True when a path can exist between two nodes. */
+  connected(a: number, b: number): boolean {
+    return a >= 0 && b >= 0 && this.comp[a] === this.comp[b];
   }
 
   private nodeAt(cx: number, cz: number, y: number): number {

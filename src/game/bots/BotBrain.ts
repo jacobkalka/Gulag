@@ -34,12 +34,27 @@ interface Mem {
   visible: boolean;
 }
 
-/** Strategic points of interest for Sublevel 9 (x, z), roughly ordered west → east. */
-const POIS: [number, number][] = [
-  [-14, 2.5], [-14, -2.5], [-11, 9], [-5, 8], [-6, 15.5], [-11, -8.2], [-8, -15.8], [-5, 3], [-5, -3],
-  [0, 8.2], [0, 15.5], [0, -6.8], [0, -15.8], [0, 0],
-  [5, 3], [5, -3], [5, 8], [6, 15.5], [8, -15.8], [11, -8.2], [11, 9], [14, 2.5], [14, -2.5],
-];
+/** Routes across a map: north, middle and south thirds, the high walkways, the low tunnels. */
+const LANES = 5;
+function laneOfPoint(sim: GameSim, p: readonly number[]): number {
+  if (p[1] > 2) return 3;
+  if (p[1] < -1) return 4;
+  const b = sim.map.bounds;
+  const t = (p[2] - b.min[2]) / Math.max(1, b.max[2] - b.min[2]);
+  return t > 0.62 ? 0 : t < 0.36 ? 2 : 1;
+}
+
+/** Points of interest bots roam between, ordered west → east (from the map; spawns and objective as a fallback). */
+const poiCache = new WeakMap<object, [number, number, number][]>();
+function poisOf(sim: GameSim): [number, number, number][] {
+  let list = poiCache.get(sim.map);
+  if (!list) {
+    const src = sim.map.pois?.length ? sim.map.pois : [...sim.map.spawns.map((sp) => sp.pos), sim.map.capture.pos];
+    list = src.map((p) => [p[0], p[1], p[2]] as [number, number, number]).sort((a, b) => a[0] - b[0]);
+    poiCache.set(sim.map, list);
+  }
+  return list;
+}
 
 export class BotBrain {
   readonly diff: (typeof DIFF)[BotDifficulty];
@@ -72,7 +87,8 @@ export class BotBrain {
   private burstT = 0;
   private wantJump = false;
   private seq = 0;
-  private lane: number;
+  /** Route offset shared by every bot in a match (so both sides take mirrored routes). */
+  private laneSeed: number;
   private poiIdx = -1;
   private lookAround = 0;
   /** Seconds until the bot will consider another grenade. */
@@ -85,7 +101,7 @@ export class BotBrain {
     this.diff = DIFF[difficulty];
     this.rng = new Rng(seed * 977 + id * 131);
     this.perceiveT = (id % 6) * 0.017;
-    this.lane = id;
+    this.laneSeed = Math.abs(Math.floor(seed)) % LANES;
     this.nadeCd = 6 + this.rng.next() * 6;
   }
 
@@ -473,10 +489,13 @@ export class BotBrain {
       lookPitch = 0;
     } else {
       // roam between points of interest, heading toward the enemy side over time
-      if (!this.goal || Math.hypot(this.goal.x - me.x, this.goal.z - me.z) < 1.2 || this.poiIdx < 0) {
-        this.poiIdx = this.nextPoi(me, sim);
-        const p = POIS[this.poiIdx];
-        this.setGoal(nav, me, { x: p[0], y: 0, z: p[1] });
+      // arrived: at the point itself, or at the end of the path when the point can't be stood on exactly
+      const last = this.path[this.path.length - 1];
+      const atEnd = !!last && this.pathIdx >= this.path.length - 1 && Math.hypot(last.x - me.x, last.z - me.z) < 0.7 && Math.abs(last.y - me.y) < 1.2;
+      if (!this.goal || (Math.hypot(this.goal.x - me.x, this.goal.z - me.z) < 1.2 && Math.abs(this.goal.y - me.y) < 1.5) || atEnd || this.poiIdx < 0) {
+        this.poiIdx = this.nextPoi(me, sim, nav);
+        const p = poisOf(sim)[this.poiIdx];
+        this.setGoal(nav, me, { x: p[0], y: p[1], z: p[2] });
       }
       const mv = this.followPath(nav, me);
       moveX = mv[0];
@@ -579,24 +598,40 @@ export class BotBrain {
     return inp;
   }
 
-  private nextPoi(me: PlayerState, sim: GameSim): number {
-    // early in the round: head out along an assigned lane; later: anywhere, biased to the enemy half
+  private nextPoi(me: PlayerState, sim: GameSim, nav: NavGrid): number {
+    // early in the round each bot takes its own route toward the enemy (north, middle, south, the
+    // high walkways or the low tunnels); later: anywhere, biased to the enemy half
     const enemySign = me.team === 0 ? 1 : -1;
     const t = sim.round.phase === 'live' ? sim.rules.roundTime - sim.round.timer : 60;
-    const cands = POIS.map((p, i) => ({ i, p })).filter(({ i }) => i !== this.poiIdx);
+    const early = t < 22;
+    const pois = poisOf(sim);
+    const here = nav.nearest(me.x, me.y, me.z);
+    const cands = pois.map((p, i) => ({ i, p })).filter(({ i, p }) => i !== this.poiIdx && nav.connected(here, nav.nearest(p[0], p[1], p[2])));
+    if (!cands.length) return Math.max(0, this.poiIdx);
+    const lane = this.laneOf(sim, me);
+    const laneUsable = cands.some(({ p }) => laneOfPoint(sim, p) === lane);
     let best = cands[0].i;
     let bestS = -Infinity;
     for (const { i, p } of cands) {
-      const d = Math.hypot(p[0] - me.x, p[1] - me.z);
-      const laneBias = t < 12 ? -Math.abs(((i + this.lane * 5) % POIS.length) - POIS.length / 2) * 0.3 : 0;
-      const adv = p[0] * enemySign * (t < 25 ? 0.15 : 0.06);
-      const s = adv + laneBias - Math.abs(d - 9) * 0.25 + this.rng.next() * 2.2;
+      const d = Math.hypot(p[0] - me.x, p[2] - me.z) + Math.abs(p[1] - me.y) * 2;
+      const laneBias = early && laneUsable ? (laneOfPoint(sim, p) === lane ? 3.5 : -2) : 0;
+      // early: step forward along the route; later: drift toward the enemy half
+      const ahead = (p[0] - me.x) * enemySign;
+      const adv = early ? clamp(ahead, -3, 14) * 0.2 : p[0] * enemySign * 0.06;
+      const s = adv + laneBias - Math.abs(d - (early ? 11 : 9)) * 0.22 + this.rng.next() * 2.2;
       if (s > bestS) {
         bestS = s;
         best = i;
       }
     }
     return best;
+  }
+
+  /** This bot's route this round: teammates spread over the lanes, and it changes every round. */
+  private laneOf(sim: GameSim, me: PlayerState): number {
+    const mates = sim.players.filter((p) => p.team === me.team).map((p) => p.id).sort((a, b) => a - b);
+    const k = Math.max(0, mates.indexOf(me.id));
+    return (k * 2 + sim.round.round + this.laneSeed) % LANES;
   }
 
   private setGoal(nav: NavGrid, me: PlayerState, g: { x: number; y: number; z: number }): void {
@@ -634,6 +669,14 @@ export class BotBrain {
       else break;
     }
     const wp = this.path[this.pathIdx];
+    // knocked or slipped off the route onto another level (off a ledge, into the collapse): plan again from here
+    const prev = this.path[Math.max(0, this.pathIdx - 1)];
+    if (me.grounded && Math.abs(wp.y - me.y) > 1.6 && Math.abs(prev.y - me.y) > 1.6) {
+      this.path = [];
+      this.pathIdx = 0;
+      this.repathT = 0;
+      return [0, 0];
+    }
     const dx = wp.x - me.x;
     const dz = wp.z - me.z;
     const l = Math.hypot(dx, dz);

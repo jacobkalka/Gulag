@@ -82,6 +82,8 @@ export class Hud {
   private markers: HTMLDivElement;
   private captions: HTMLDivElement;
   private captionSeen = new Map<string, number>();
+  private place: HTMLDivElement;
+  private placeT = 0;
   private lowerHud: HTMLElement[] = [];
   private lastPips = '';
   localTeam: 0 | 1 = 0;
@@ -97,6 +99,7 @@ export class Hud {
     this.dmgRing = el('div', 'hud-dmg-ring', this.root);
     this.markers = el('div', 'hud-markers', this.root);
     this.captions = el('div', 'hud-captions', this.root);
+    this.place = el('div', 'hud-place', this.root);
     this.nums = el('div', 'hud-nums', this.root);
     this.scope = el('div', 'hud-scope', this.root, `<div class="hud-scope-rim"></div><svg class="hud-scope-reticle" viewBox="-100 -100 200 200" aria-hidden="true">  <g stroke="#060606" stroke-linecap="butt" fill="none">    <path d="M-100 0H-34M34 0H100M0 -100V-34M0 34V100" stroke-width="2.6"/>    <path d="M-34 0H-1.6M1.6 0H34M0 -34V-1.6M0 1.6V34" stroke-width="0.55"/>    <path d="M-25 -2.2V2.2M-17 -1.6V1.6M-8.5 -1.6V1.6M8.5 -1.6V1.6M17 -1.6V1.6M25 -2.2V2.2M-2.2 8.5H2.2M-1.6 17H1.6M-2.2 25H2.2" stroke-width="0.5"/>  </g>  <circle r="0.7" fill="#d1271b"/></svg>`);
     // health
@@ -321,6 +324,14 @@ export class Hud {
     }, 2200);
   }
 
+  /** Briefly names the area the player is in (on spawn and when entering a new zone). */
+  location(name: string, seconds = 2.6): void {
+    if (!name) return;
+    this.place.innerHTML = `<span>${esc(name)}</span>`;
+    this.place.classList.add('show');
+    this.placeT = seconds;
+  }
+
   showBanner(title: string, sub = '', kind: 'neutral' | 'win' | 'lose' | 'warn' | 'count' = 'neutral', duration = 2.2): void {
     this.banner.className = `hud-banner show ${kind}`;
     this.banner.innerHTML = `<div class="t">${esc(title)}</div>${sub ? `<div class="s">${esc(sub)}</div>` : ''}`;
@@ -401,6 +412,10 @@ export class Hud {
     if (this.bannerT > 0) {
       this.bannerT -= dt;
       if (this.bannerT <= 0) this.banner.classList.remove('show');
+    }
+    if (this.placeT > 0) {
+      this.placeT -= dt;
+      if (this.placeT <= 0) this.place.classList.remove('show');
     }
   }
 }

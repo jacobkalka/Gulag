@@ -419,6 +419,41 @@ const pump: PropDef = {
   colliders: (v) => PROP_COLLIDERS.pump(v),
 };
 
+/** Diesel generator on a skid: engine block, radiator, control panel, exhaust stack. */
+const generator: PropDef = {
+  cacheable: true,
+  build(lib, v) {
+    const s = new Sink(lib);
+    const body = v % 2 ? 'paintGreen' : 'paintOrange';
+    s.add('concrete', rbox(3.3, 0.18, 1.6, 0.03, 1, { p: [0, 0.09, 0] }));
+    s.add('darkMetal', box(3.1, 0.16, 1.4, { p: [0, 0.26, 0] }));
+    // engine block with cooling fins and a cover
+    s.add(body, rbox(1.9, 1.1, 1.2, 0.05, 2, { p: [-0.45, 0.9, 0] }));
+    for (let i = 0; i < 10; i++) s.add('darkMetal', box(0.025, 0.7, 1.24, { p: [-1.25 + i * 0.09, 0.95, 0] }));
+    s.add(body, rbox(1.6, 0.18, 1.0, 0.04, 2, { p: [-0.45, 1.56, 0] }));
+    // radiator housing with a grille
+    s.add(body, rbox(0.7, 1.45, 1.3, 0.04, 2, { p: [1.15, 1.02, 0] }));
+    for (let i = 0; i < 8; i++) s.add('black', box(0.02, 1.1, 1.05, { p: [1.51, 0.75 + i * 0.07, 0], r: [0, 0, 0] }));
+    s.add('darkMetal', box(0.04, 1.2, 1.15, { p: [1.52, 1.0, 0] }));
+    // control panel with gauges
+    s.add('paintGrey', rbox(0.5, 0.6, 0.18, 0.02, 1, { p: [-0.9, 1.25, -0.7] }));
+    for (const [x, y] of [[-1.02, 1.36], [-0.8, 1.36]] as const) {
+      s.add('darkMetal', cylZ(0.06, 0.03, 14, { p: [x, y, -0.8] }));
+      s.add('ceramic', cylZ(0.05, 0.005, 14, { p: [x, y, -0.818] }));
+    }
+    s.add('accentOrange', box(0.05, 0.05, 0.02, { p: [-0.9, 1.12, -0.8] }));
+    // exhaust stack and pipe
+    s.add('rust', cyl(0.14, 0.14, 1.7, 14, { p: [1.15, 2.55, 0.35] }));
+    s.add('rust', cyl(0.18, 0.14, 0.12, 14, { p: [1.15, 3.42, 0.35] }));
+    s.add('paintGrey', cylX(0.08, 1.4, 12, { p: [0.3, 1.25, 0.66] }));
+    // fuel line and a hazard-striped skid end
+    s.add('gunRubber', cylX(0.03, 2.2, 8, { p: [-0.2, 0.42, -0.64] }));
+    s.add('paintOrange', box(0.06, 0.16, 1.42, { p: [-1.56, 0.26, 0] }));
+    return s.build('generator');
+  },
+  colliders: (v) => PROP_COLLIDERS.generator(v),
+};
+
 // -------------------------------------------------------------------------- showers / cells / rooms
 
 const showerHead: PropDef = {
@@ -853,4 +888,5 @@ export const PROPS: Record<string, PropDef> = {
   lockers,
   lockersDouble,
   lockersFallen,
+  generator,
 };

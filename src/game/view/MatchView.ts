@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { envProbePos } from '@/game/world/builder';
 import type { Renderer } from '@/engine/Renderer';
 import type { Assets } from '@/assets/Assets';
 import type { Input } from '@/engine/Input';
@@ -16,6 +17,7 @@ import { Viewmodel } from './Viewmodel';
 import type { RenderPlayer } from './renderPlayer';
 import { SoldierView } from './soldier/SoldierView';
 import { skinFor, type SoldierSkin } from './soldier/soldierAssets';
+import { zoneAt } from '@/game/world/builder';
 import { Effects } from './Effects';
 import { CameraFeel } from './CameraFeel';
 import { Flashlights } from './Flashlights';
@@ -129,7 +131,11 @@ export class MatchView {
   private fps = 60;
   private reloadSounds: { t: number; name: string }[] = [];
   private lastCountdown = -1;
-  private puddles: { x: number; z: number; r: number }[] = [];
+  private puddles: { x: number; y: number; z: number; r: number }[] = [];
+  /** Zone callouts: the last zone named and the life it was named in. */
+  private placeName = '';
+  private placeLife = -1;
+  private placeT = 0;
   private deathYaw = new Map<number, number>();
   private flashSound = 0;
   paused = false;
@@ -150,7 +156,7 @@ export class MatchView {
     this.scene.add(this.flashlights.group);
     this.vm = new Viewmodel(o.assets.materials);
     this.hud = new Hud(o.hudParent);
-    for (const d of s.map.decals) if (d.kind === 'puddle') this.puddles.push({ x: d.pos[0], z: d.pos[2], r: Math.min(d.size[0], d.size[1]) * 0.42 });
+    for (const d of s.map.decals) if (d.kind === 'puddle') this.puddles.push({ x: d.pos[0], y: d.pos[1], z: d.pos[2], r: Math.min(d.size[0], d.size[1]) * 0.42 });
     const local = this.localPlayer();
     if (local) {
       this.hud.localTeam = local.team;
@@ -168,8 +174,8 @@ export class MatchView {
   init(): void {
     const r = this.o.renderer;
     r.options = { ...r.options, ...gradeOptions(this.o.session.map.id, settings.value, r.options.quality.level) };
-    this.mapView.lights.settle(new THREE.Vector3(0, 1.7, 0), 0);
-    this.env = bakeReflectionProbe(r.gl, this.scene, new THREE.Vector3(0, 1.7, 0), r.options.quality.reflectionProbeSize);
+    this.mapView.lights.settle(new THREE.Vector3(...envProbePos(this.o.session.map)), 0);
+    this.env = bakeReflectionProbe(r.gl, this.scene, new THREE.Vector3(...envProbePos(this.o.session.map)), r.options.quality.reflectionProbeSize);
     this.o.assets.materials.setEnvMap(this.env);
     this.mapView.setEnvMap(this.env);
     r.setScenes(this.scene, this.camera, this.vm.scene, this.vm.camera);
@@ -587,7 +593,7 @@ export class MatchView {
         audio.ui('countGo', 0.9);
         break;
       case 'overtime':
-        this.hud.showBanner('OVERTIME', 'CAPTURE THE DRAIN', 'warn', 2.6);
+        this.hud.showBanner('OVERTIME', `CAPTURE THE ${s.map.capture.name ?? 'OBJECTIVE'}`, 'warn', 2.6);
         audio.ui('overtime', 0.9);
         break;
       case 'capture':
@@ -964,7 +970,10 @@ export class MatchView {
     this.stepDist.set(p.id, 0);
     const sup = this.o.session.world.supportHeight(p.x, p.z, 0.2, p.y + 0.1, 0.2, 0.3);
     let surf = SURFACES[sup.surface] ?? 'concrete';
-    for (const pd of this.puddles) if (Math.hypot(p.x - pd.x, p.z - pd.z) < pd.r && p.y < 0.2) surf = 'water';
+    for (const pd of this.puddles) if (Math.hypot(p.x - pd.x, p.z - pd.z) < pd.r && Math.abs(p.y - pd.y) < 0.25) surf = 'water';
+    for (const w of this.o.session.map.water ?? []) {
+      if (p.x > w.min[0] && p.x < w.max[0] && p.z > w.min[2] && p.z < w.max[2] && p.y > w.min[1] - 0.1 && p.y < w.max[1] + 0.05) surf = 'water';
+    }
     const name = STEP_SOUND[surf] ?? 'stepConcrete';
     const vol = (p.sprinting ? 0.85 : p.crouch > 0.5 ? 0.25 : 0.55) * (isLocal ? 0.45 : 1);
     if (isLocal) audio.play(name, { volume: vol });
@@ -1058,6 +1067,25 @@ export class MatchView {
 
   // ------------------------------------------------------------------ HUD + audio
 
+  /** Names the zone on spawn, and again when the player walks into a different one. */
+  private updatePlace(local: PlayerState, dt: number): void {
+    this.placeT += dt;
+    if (!local.alive) return;
+    const name = zoneAt(this.o.session.map.zones, local.x, local.y + 0.1, local.z);
+    if (local.life !== this.placeLife) {
+      this.placeLife = local.life;
+      this.placeName = name;
+      this.placeT = 0;
+      this.hud.location(name, 3.2);
+      return;
+    }
+    if (name && name !== this.placeName && this.placeT > 1.5) {
+      this.placeName = name;
+      this.placeT = 0;
+      this.hud.location(name);
+    }
+  }
+
   private updateHud(dt: number, local: PlayerState | undefined): void {
     const s = this.o.session;
     const hud = this.hud;
@@ -1066,6 +1094,7 @@ export class MatchView {
     const alive = [0, 0] as [number, number];
     for (const p of s.players) if (p.alive) alive[p.team]++;
     hud.setRound(s.round, s.rules, alive, s.rules.teamSize);
+    if (local) this.updatePlace(local, dt);
     if (local) {
       hud.localTeam = local.team;
       hud.setHealth(local.alive ? local.hp : 0);
@@ -1104,7 +1133,7 @@ export class MatchView {
         const cp = s.map.capture.pos;
         const sp = this.project(cp[0], cp[1] + 1.2, cp[2]);
         const d = Math.hypot(cp[0] - this.camera.position.x, cp[2] - this.camera.position.z);
-        if (sp) markers.push({ x: sp.x, y: sp.y, text: `◆ DRAIN ${Math.round(d)}m`, kind: 'objective' });
+        if (sp) markers.push({ x: sp.x, y: sp.y, text: `◆ ${s.map.capture.name ?? 'OBJECTIVE'} ${Math.round(d)}m`, kind: 'objective' });
       }
       hud.setMarkers(markers);
     }

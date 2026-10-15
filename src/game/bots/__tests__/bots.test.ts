@@ -17,23 +17,31 @@ describe('nav grid', () => {
     expect(nav.cover.length).toBeGreaterThan(80);
     expect(ms).toBeLessThan(4000);
   });
+  const spawnA = map.spawns.find((sp) => sp.team === 0)!.pos;
+  const spawnB = map.spawns.find((sp) => sp.team === 1)!.pos;
   it('finds a path from spawn A to spawn B', () => {
-    const a = nav.nearest(-23.4, 0, 0);
-    const b = nav.nearest(23.4, 0, 0);
+    const a = nav.nearest(spawnA[0], spawnA[1], spawnA[2]);
+    const b = nav.nearest(spawnB[0], spawnB[1], spawnB[2]);
     const p = nav.findPath(a, b);
     expect(p).not.toBeNull();
     expect(p!.length).toBeGreaterThan(40);
   });
-  it('finds a path up onto the catwalk', () => {
-    const a = nav.nearest(-14, 0, 9);
-    const b = nav.nearest(0, 2.8, 15.6);
-    expect(nav.nodes[b].y).toBeCloseTo(2.8, 1);
-    expect(nav.findPath(a, b)).not.toBeNull();
+  it('finds paths up onto the catwalk and down into the cistern', () => {
+    const a = nav.nearest(-17.5, 0, 8);
+    const up = nav.nearest(0, 3.2, 22.8);
+    expect(nav.nodes[up].y).toBeCloseTo(3.2, 1);
+    expect(nav.findPath(a, up)).not.toBeNull();
+    const down = nav.nearest(0, -2.8, 3);
+    expect(nav.nodes[down].y).toBeCloseTo(-2.8, 1);
+    expect(nav.findPath(a, down)).not.toBeNull();
   });
-  it('reaches the cells through their doors', () => {
-    const a = nav.nearest(-16.5, 0, -8);
-    const b = nav.nearest(-16.5, 0, -12.5);
-    expect(nav.findPath(a, b)).not.toBeNull();
+  it('reaches the cells on both tiers through their doors', () => {
+    const a = nav.nearest(-6, 0, -15);
+    for (const y of [0, 3.2]) {
+      const b = nav.nearest(-6, y, -22.4);
+      expect(nav.nodes[b].y).toBeCloseTo(y, 1);
+      expect(nav.findPath(a, b)).not.toBeNull();
+    }
   });
 });
 
@@ -48,7 +56,7 @@ describe('bot hunting', () => {
     let t = 0;
     for (; t < 60 * 60 && sim.round.phase !== 'roundEnd'; t++) {
       const d0 = sim.player(0)!;
-      d0.x = -21.7;
+      d0.x = -27.2;
       d0.z = -0.8;
       sim.step((p) => (p.id === 0 ? { seq: t, mx: 0, mz: 0, yaw: -Math.PI / 2, pitch: 0, buttons: 0, slot: 0, viewTick: 0 } : brain.think(sim, nav, p)));
       brain.observe(sim.events, sim, sim.player(1)!);
@@ -59,11 +67,9 @@ describe('bot hunting', () => {
   it('every walkable area is reachable from both spawns', () => {
     const sim = new GameSim(map, PLAYLISTS['2v2'].rules, 5);
     const nav = new NavGrid(sim.world, map);
-    const points: [number, number, number][] = [
-      [0, 0, 0], [0, 2.8, 15.6], [-14, 0, 2], [14, 0, -2], [-16.5, 0, -12.5], [16.5, 0, -12.5], [0, 0, -15.8],
-      [-22, 0, 12], [22, 0, -12], [-22, 0, -12], [0, 0, 8.2], [-5, 0, -8.2],
-    ];
-    for (const sp of [[-23.4, 0, 0], [23.4, 0, 0]] as const) {
+    // every point of interest, the objective and both spawns
+    const points = [...(map.pois ?? []), map.capture.pos];
+    for (const sp of [map.spawns.find((s) => s.team === 0)!.pos, map.spawns.find((s) => s.team === 1)!.pos]) {
       const a = nav.nearest(sp[0], sp[1], sp[2]);
       for (const [x, y, z] of points) {
         const b = nav.nearest(x, y, z);

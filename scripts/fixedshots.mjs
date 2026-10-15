@@ -11,7 +11,7 @@ const only = onlyArg.startsWith('only=') ? new Set(onlyArg.slice(5).split(',')) 
 const base = process.env.URL || 'http://localhost:5173/';
 mkdirSync(outDir, { recursive: true });
 
-const ART_CAMS = ['hero', 'shaft', 'fpcells', 'boiler', 'cells', 'lockers', 'spawn', 'fp'];
+const ART_CAMS = ['hero', 'shaft', 'fpcells', 'boiler', 'cells', 'lockers', 'spawn', 'fp', 'cistern', 'catwalk'];
 const MATCH_SHOTS = [
   { name: 'scope-vigil', primary: 'vigil', kind: 'ads' },
   { name: 'ads-halberd', primary: 'halberd', kind: 'ads' },
@@ -65,7 +65,7 @@ async function matchShot({ name, primary, kind }) {
     const me = s.players.find((p) => p.id === s.localId);
     if (aimLong) {
       // stand at the west end of the cell block corridor and look east down its length
-      Object.assign(me, { x: -17.5, z: -8.2, vx: 0, vz: 0 });
+      Object.assign(me, { x: -8.4, z: -10.3, vx: 0, vz: 0 });
       g.input.yaw = -Math.PI / 2;
     } else {
       // look down the longest clear sightline from where we stand
@@ -108,10 +108,11 @@ async function matchShot({ name, primary, kind }) {
       const s = g.debug().session;
       const me = s.players.find((p) => p.id === s.localId);
       const en = s.players.find((p) => p.id !== s.localId);
-      Object.assign(me, { x: -16, z: -8.2, vx: 0, vz: 0 });
+      // cell block corridor, along the edge of the gallery
+      Object.assign(me, { x: -9.4, z: -16.6, vx: 0, vz: 0 });
       g.input.yaw = -Math.PI / 2;
       g.input.pitch = -0.05;
-      Object.assign(en, { x: -9, z: -8.0, vx: 0, vz: 0, yaw: Math.PI / 2, pitch: -0.05 });
+      Object.assign(en, { x: -2.4, z: -16.6, vx: 0, vz: 0, yaw: Math.PI / 2, pitch: -0.05 });
       // the idled bots feed yaw 0; keep this one facing us so its flashlight points at the camera
       const bot = s.bots?.get?.(en.id);
       if (bot) bot.think = () => ({ seq: 0, mx: 0, mz: 0, yaw: Math.PI / 2, pitch: -0.05, buttons: 0, slot: 0, viewTick: 0 });
@@ -161,13 +162,14 @@ async function matchShot({ name, primary, kind }) {
       const lum = (c) => 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
       const dirs = [[0, 1, 0], [0, -1, 0], [1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1]];
       const light = (x, z) => dirs.reduce((a, d) => a + lum(P.sample(new V3(x, 1.2, z), new V3(...d), col())), 0) / 6;
-      // stand mid-corridor and pick the darkest visible standing spot
-      Object.assign(me, { x: -12, z: -8.2, vx: 0, vz: 0 });
+      // stand at the west end of the cell block corridor and pick the darkest visible standing spot
+      Object.assign(me, { x: -8.6, z: -10.4, vx: 0, vz: 0 });
       let best = null;
-      for (let x = -24; x <= 24; x += 0.5) {
-        for (let z = -16.5; z <= 16.5; z += 0.5) {
+      for (let x = -35; x <= 35; x += 0.5) {
+        for (let z = -23; z <= 23; z += 0.5) {
           const d = Math.hypot(x - me.x, z - me.z);
           if (d < 6 || d > 14) continue;
+          if (s.world.supportHeight(x, z, 0.3, 0.1, 0.2, 0.3).y !== 0) continue; // on the main floor
           if (s.world.cylinderBlocked(x, 0.05, z, 0.4, 1.75)) continue;
           if (!s.world.lineOfSight(me.x, 1.6, me.z, x, 1.3, z)) continue;
           const l = light(x, z);

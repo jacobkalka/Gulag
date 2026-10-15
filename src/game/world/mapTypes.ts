@@ -38,6 +38,8 @@ export interface Ramp {
   dir: 1 | -1;
   mat: string;
   surface?: Surface;
+  /** Drawn as a staircase (collision stays a smooth slope). */
+  steps?: boolean;
 }
 
 export interface PropPlacement {
@@ -115,6 +117,19 @@ export interface SpawnPoint {
   yaw: number;
 }
 
+/** Named area for callouts ("INTAKE A", "CISTERN"); the first zone containing a point wins. */
+export interface MapZone {
+  name: string;
+  min: V3;
+  max: V3;
+}
+
+/** Standing water: a surface at max[1] over the box (footsteps splash, the view draws it). */
+export interface WaterVolume {
+  min: V3;
+  max: V3;
+}
+
 export interface ReflectionProbe {
   pos: V3;
   /** Box bounds of the zone the probe serves. */
@@ -132,7 +147,14 @@ export interface MapDef {
   lights: LightDef[];
   decals: DecalDef[];
   spawns: SpawnPoint[];
-  capture: { pos: V3; radius: number };
+  /** Overtime objective; `name` labels its marker. */
+  capture: { pos: V3; radius: number; name?: string };
+  zones?: MapZone[];
+  water?: WaterVolume[];
+  /** Points of interest bots roam between (x, y, z on walkable floors). */
+  pois?: V3[];
+  /** Highest walkable floor the bot nav grid samples from (default 3.3 m). */
+  navTopY?: number;
   probes: ReflectionProbe[];
   /** Openings to the sky (for moonlight shafts), as XZ rectangles at roof height. */
   skyHoles: { min: V3; max: V3 }[];

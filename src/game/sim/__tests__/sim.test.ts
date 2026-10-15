@@ -17,43 +17,48 @@ describe('collision world', () => {
   it('builds primitives from the map', () => {
     expect(world.prims.length).toBeGreaterThan(200);
   });
-  it('raycast hits the shower north wall', () => {
-    // from the drain looking north (+z): the wall at z = 6 (inner face 5.85)
-    const hit = world.raycast(0, 1.5, 0, 0, 0, 1, 50);
+  it('raycast hits the atrium north wall', () => {
+    // on the atrium floor between the shower stubs, looking north (+z): the wall's inner face is at 10.85
+    const hit = world.raycast(-3.5, 1.5, 6, 0, 0, 1, 50);
     expect(hit).not.toBeNull();
-    expect(hit!.z).toBeGreaterThan(5.5);
-    expect(hit!.z).toBeLessThan(6.2);
+    expect(hit!.z).toBeGreaterThan(10.7);
+    expect(hit!.z).toBeLessThan(10.9);
     expect(hit!.nz).toBeCloseTo(-1);
   });
-  it('raycast hits the floor below', () => {
-    const hit = world.raycast(0, 1.5, 0, 0, -1, 0, 10);
+  it('raycast hits the floor below, and the cistern floor through the collapse', () => {
+    const hit = world.raycast(-8.5, 1.5, 6, 0, -1, 0, 10);
     expect(hit).not.toBeNull();
     expect(hit!.y).toBeCloseTo(0, 3);
     expect(hit!.ny).toBeCloseTo(1);
+    const pit = world.raycast(-1.5, 1.5, 3.2, 0, -1, 0, 10);
+    expect(pit!.y).toBeCloseTo(-2.8, 3);
   });
   it('raycast hits a boiler (cylinder)', () => {
-    const hit = world.raycast(0, 1.5, 7.5, 0, 0, 1, 10);
+    // boiler at (-6, 18.4), radius 1.48
+    const hit = world.raycast(-6, 1.5, 14.5, 0, 0, 1, 10);
     expect(hit).not.toBeNull();
-    expect(hit!.z).toBeGreaterThan(9.0);
-    expect(hit!.z).toBeLessThan(10.0);
+    expect(hit!.z).toBeGreaterThan(16.8);
+    expect(hit!.z).toBeLessThan(17.0);
   });
-  it('support height finds the catwalk top and floor', () => {
-    expect(world.supportHeight(0, 15.5, MOVE.radius, 2.8, 0.4).y).toBeCloseTo(2.8, 3);
-    expect(world.supportHeight(-20, 0, MOVE.radius, 0, 0.4).y).toBeCloseTo(0, 3);
+  it('support height finds the walkways, the floor and the cistern', () => {
+    expect(world.supportHeight(0, 16, MOVE.radius, 3.2, 0.4).y).toBeCloseTo(3.2, 3);
+    expect(world.supportHeight(-20, 6, MOVE.radius, 0, 0.4).y).toBeCloseTo(0, 3);
+    expect(world.supportHeight(7, 4.2, MOVE.radius, -2.8, 0.4).y).toBeCloseTo(-2.8, 3);
   });
-  it('ramp height increases toward the catwalk', () => {
-    const lo = world.supportHeight(-17.2, 15.5, 0.2, 0.0, 3).y;
-    const hi = world.supportHeight(-13.5, 15.5, 0.2, 2.0, 3).y;
+  it('stairs rise toward the catwalk', () => {
+    const lo = world.supportHeight(-19.6, 13.5, 0.2, 0.0, 3).y;
+    const hi = world.supportHeight(-19.6, 20, 0.2, 2.0, 3).y;
     expect(hi).toBeGreaterThan(lo + 1);
   });
 });
 
+/** Intake A: an open 12 m x 16 m room with nothing between x = -32 and -27. */
 function freshPlayer() {
   const p = makePlayer({ id: 0, team: 0, name: 't', bot: false });
   p.alive = true;
-  p.x = -22;
+  p.x = -33;
   p.y = 0;
-  p.z = 2.5;
+  p.z = 0.5;
   p.yaw = -Math.PI / 2; // facing +X
   return p;
 }
@@ -64,19 +69,18 @@ describe('movement', () => {
     const p = freshPlayer();
     const inp: PlayerInput = { ...emptyInput(1, p.yaw), mz: 1 };
     for (let i = 0; i < 60; i++) stepMovement(p, inp, world, DT, false, w);
-    expect(p.x).toBeGreaterThan(-22 + 3.5);
+    expect(p.x).toBeGreaterThan(-33 + 3.5);
     expect(Math.hypot(p.vx, p.vz)).toBeCloseTo(MOVE.walk * w.move, 1);
     expect(p.grounded).toBe(true);
   });
   it('is stopped by walls', () => {
     const p = freshPlayer();
-    p.x = -23;
-    p.z = 0.5;
-    p.yaw = Math.PI / 2; // facing -X into the outer wall at x = -25
+    p.x = -35;
+    p.yaw = Math.PI / 2; // facing -X into the outer wall at x = -36
     const inp: PlayerInput = { ...emptyInput(1, p.yaw), mz: 1 };
     for (let i = 0; i < 120; i++) stepMovement(p, inp, world, DT, false, w);
-    expect(p.x).toBeGreaterThan(-25 + MOVE.radius - 0.01);
-    expect(p.x).toBeLessThan(-24.3);
+    expect(p.x).toBeGreaterThan(-36 + MOVE.radius - 0.01);
+    expect(p.x).toBeLessThan(-35.3);
   });
   it('jumps and lands', () => {
     const p = freshPlayer();
@@ -94,32 +98,46 @@ describe('movement', () => {
     expect(p.y).toBeCloseTo(0, 3);
     expect(p.grounded).toBe(true);
   });
-  it('walks up the ramp onto the catwalk', () => {
+  it('climbs the generator room stairs onto the catwalk', () => {
     const p = freshPlayer();
-    p.x = -18.3;
-    p.z = 15.6;
-    p.yaw = -Math.PI / 2; // +X up the ramp
+    p.x = -19.6;
+    p.z = 12.2;
+    p.yaw = Math.PI; // +Z up the stairs
     const inp: PlayerInput = { ...emptyInput(1, p.yaw), mz: 1 };
     for (let i = 0; i < 150; i++) stepMovement(p, inp, world, DT, false, w);
-    expect(p.y).toBeCloseTo(2.8, 1);
-    expect(p.x).toBeGreaterThan(-12.5);
+    expect(p.y).toBeCloseTo(3.2, 1);
+    expect(p.z).toBeGreaterThan(21.6);
   });
   it('mantles onto a crate', () => {
-    // crate at (-15.5, 0, 7.3): stand west of it facing +X
+    // crate in the cell block corridor at (-8.6, 0, -15.6): stand north of it facing -Z
     const p = freshPlayer();
-    p.x = -16.0 - 0.0;
-    p.z = 8.6;
-    p.yaw = Math.PI; // facing +Z? use -Z toward z=7.3
-    p.yaw = 0; // facing -Z
-    p.x = -15.5;
-    p.z = 8.3;
+    p.yaw = 0;
+    p.x = -8.6;
+    p.z = -14.6;
     const jump: PlayerInput = { ...emptyInput(1, p.yaw), mz: 1, buttons: BTN.JUMP };
     stepMovement(p, jump, world, DT, false, w);
     p.prevButtons = jump.buttons;
     const idle: PlayerInput = { ...jump, mz: 0, buttons: 0 };
     for (let i = 0; i < 40; i++) stepMovement(p, idle, world, DT, false, w);
     expect(p.y).toBeCloseTo(1.0, 2);
-    expect(p.z).toBeLessThan(7.8);
+    expect(p.z).toBeLessThan(-15.1);
+  });
+  it('drops into the collapse and walks back out up the rubble', () => {
+    const p = freshPlayer();
+    p.x = -7.2;
+    p.z = -2.5;
+    p.yaw = -Math.PI / 2; // +X off the rim
+    let inp: PlayerInput = { ...emptyInput(1, p.yaw), mz: 1 };
+    for (let i = 0; i < 70; i++) stepMovement(p, inp, world, DT, false, w);
+    expect(p.y).toBeLessThan(-1.5);
+    p.x = -1.5;
+    p.y = -2.8;
+    p.z = -2.5;
+    p.yaw = Math.PI / 2; // -X up the ramp
+    inp = { ...emptyInput(1, p.yaw), mz: 1 };
+    for (let i = 0; i < 120; i++) stepMovement(p, inp, world, DT, false, w);
+    expect(p.y).toBeCloseTo(0, 1);
+    expect(p.x).toBeLessThan(-6);
   });
   it('crouches and cannot stand under low ceilings', () => {
     const p = freshPlayer();

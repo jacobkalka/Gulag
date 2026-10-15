@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { envProbePos } from '@/game/world/builder';
 import { Renderer, DEFAULT_RENDER_OPTIONS } from '@/engine/Renderer';
 import { QUALITY_PRESETS } from '@/engine/quality';
 import { Input } from '@/engine/Input';
@@ -30,6 +31,13 @@ import { PerfOverlay } from '@/ui/PerfOverlay';
 // into this to start/leave matches; it reports back through callbacks.
 
 export type Screen = 'boot' | 'menu' | 'match' | 'results';
+
+
+/** Menu stage position per backdrop map: the lineup faces +z toward the camera from here. */
+const MENU_ANCHORS: Record<string, [number, number, number]> = {
+  // north floor of the collapse, the pit and the moonlight behind the lineup
+  sublevel9: [0, 0, 6.2],
+};
 
 export class GameController {
   readonly renderer: Renderer;
@@ -155,8 +163,8 @@ export class GameController {
     this.menuMap = new MapView(this.map, this.assets.materials, { ...q, fixtureLights: Math.min(q.fixtureLights, 8) }, {});
     scene.add(this.menuMap.root);
     const cam = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.05, 200);
-    this.menuMap.lights.settle(new THREE.Vector3(0, 1.7, 0), 0);
-    const env = bakeReflectionProbe(this.renderer.gl, scene, new THREE.Vector3(0, 1.7, 0), q.reflectionProbeSize);
+    this.menuMap.lights.settle(new THREE.Vector3(...envProbePos(this.map)), 0);
+    const env = bakeReflectionProbe(this.renderer.gl, scene, new THREE.Vector3(...envProbePos(this.map)), q.reflectionProbeSize);
     this.assets.materials.setEnvMap(env);
     this.menuMap.setEnvMap(env);
     this.menuScene = scene;
@@ -164,20 +172,22 @@ export class GameController {
     this.renderer.setScenes(scene, cam);
     this.menuMap.atmosphere.setPixelScale(window.innerHeight);
     // weapon showcase rig above the drain
+    // everything on the menu stage is placed relative to the map's menu anchor
+    const A = this.menuAnchor;
     const group = new THREE.Group();
-    group.position.set(0, 1.32, 0);
+    group.position.copy(A).add(new THREE.Vector3(0, 1.32, 0));
     scene.add(group);
     const key = new THREE.SpotLight(0xfff6ec, 0, 6, 0.6, 0.5, 1.5);
-    key.position.set(-1.2, 2.6, 1.4);
+    key.position.copy(A).add(new THREE.Vector3(-1.2, 2.6, 1.4));
     key.target = group;
     const rim = new THREE.PointLight(0x7fb6ff, 0, 5, 2);
-    rim.position.set(1.1, 1.7, -0.9);
+    rim.position.copy(A).add(new THREE.Vector3(1.1, 1.7, -0.9));
     const fill = new THREE.PointLight(0xdfe8ff, 0, 4, 2);
-    fill.position.set(0.6, 0.9, 1.2);
+    fill.position.copy(A).add(new THREE.Vector3(0.6, 0.9, 1.2));
     scene.add(key, rim, fill);
     this.showcase = { group, key, rim, fill, model: null, id: null, t: 0, blend: 0 };
     const stageGroup = new THREE.Group();
-    stageGroup.position.set(0, 0, 0.4);
+    stageGroup.position.copy(A).add(new THREE.Vector3(0, 0, 0.4));
     scene.add(stageGroup);
     this.stage = { group: stageGroup, ops: [], on: false, blend: 0 };
   }
@@ -259,10 +269,11 @@ export class GameController {
     }
     const k = st.blend * st.blend * (3 - 2 * st.blend);
     // frame the lineup on the left half of the screen (UI lives on the right)
-    const camPos = new THREE.Vector3(1.3 + Math.sin(t * 0.07) * 0.08, 1.5, 3.3);
+    const A = this.menuAnchor;
+    const camPos = new THREE.Vector3(1.3 + Math.sin(t * 0.07) * 0.08, 1.5, 3.3).add(A);
     this.menuCam.position.lerp(camPos, Math.min(1, k + 0.02));
-    const look = new THREE.Vector3(1.0, 1.15, 0.2);
-    const cur = new THREE.Vector3(0, 1.4, 0).lerp(look, k);
+    const look = new THREE.Vector3(1.0, 1.15, 0.2).add(A);
+    const cur = new THREE.Vector3(0, 1.4, 0).add(A).lerp(look, k);
     this.menuCam.lookAt(cur);
     return k;
   }
@@ -307,8 +318,8 @@ export class GameController {
     const dist = 0.75 + len * 1.25;
     // look slightly below the gun so it sits in the upper-middle of the screen above the stats
     // aim right of the model so it sits left of center, clear of the item list
-    const target = new THREE.Vector3(0.22, 1.2, 0);
-    const camPos = new THREE.Vector3(0.27, 1.4, dist);
+    const target = new THREE.Vector3(0.22, 1.2, 0).add(this.menuAnchor);
+    const camPos = new THREE.Vector3(0.27, 1.4, dist).add(this.menuAnchor);
     if (k < 1) {
       // blend from the lobby dolly
       this.menuCam.position.lerp(camPos, Math.min(1, k + 0.02));
@@ -317,12 +328,19 @@ export class GameController {
     return true;
   }
 
-  /** Lobby/menu backdrop: slow dolly through the showers. */
+  /** Lobby/menu backdrop: a slow dolly along the edge of the collapse. */
   setMenuCamera(t: number): void {
     if (!this.menuCam) return;
+    const A = this.menuAnchor;
     const a = t * 0.04;
-    this.menuCam.position.set(Math.sin(a) * 5.5, 1.5 + Math.sin(t * 0.13) * 0.15, Math.cos(a) * 4.0);
-    this.menuCam.lookAt(0, 1.4, 0);
+    this.menuCam.position.set(A.x + Math.sin(a) * 5.5, A.y + 1.5 + Math.sin(t * 0.13) * 0.15, A.z + 1.6 + Math.cos(a) * 2.2);
+    this.menuCam.lookAt(A.x, A.y + 0.4, A.z - 6.6);
+  }
+
+  /** Where the menu stage stands in the backdrop map (open floor with a view). */
+  private get menuAnchor(): THREE.Vector3 {
+    const a = MENU_ANCHORS[this.map.id] ?? [0, 0, 0];
+    return new THREE.Vector3(a[0], a[1], a[2]);
   }
 
   startBotMatch(playlist: PlaylistId, difficulty: BotDifficulty, loadout: Loadout, name: string): void {

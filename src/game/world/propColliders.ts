@@ -65,4 +65,5 @@ export const PROP_COLLIDERS: Record<string, (v: number) => PropCollider[]> = {
     return [bx([-L / 2, 0, -0.5], [L / 2, 1.98, 0.5], 'metal')];
   },
   lockersFallen: () => [bx([-0.68, 0, 0.0], [0.68, 0.52, 2.0], 'metal')],
+  generator: () => [bx([-1.6, 0, -0.75], [1.6, 1.75, 0.75], 'metal'), { kind: 'cyl', x: 1.15, z: 0.35, r: 0.14, y0: 1.75, y1: 3.4, surface: 'metal' }],
 };

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { envProbePos } from '@/game/world/builder';
 import { Renderer, DEFAULT_RENDER_OPTIONS } from '@/engine/Renderer';
 import { QUALITY_PRESETS, type QualityLevel } from '@/engine/quality';
 import { Assets } from '@/assets/Assets';
@@ -20,7 +21,7 @@ import { DEFAULT_SETTINGS } from '@/app/settings';
 //   Query: ?q=low|medium|high|ultra  &cam=<name>
 /** Fixed cameras per map used by screenshots and `npm run audit:contrast`. */
 export const ART_CAMS: Record<string, string[]> = {
-  sublevel9: ['hero', 'shaft', 'boiler', 'cells', 'lockers', 'spawn', 'fpcells'],
+  sublevel9: ['hero', 'shaft', 'boiler', 'cells', 'lockers', 'spawn', 'fpcells', 'cistern', 'catwalk'],
 };
 
 export async function runArtTest(canvas: HTMLCanvasElement): Promise<void> {
@@ -45,16 +46,21 @@ export async function runArtTest(canvas: HTMLCanvasElement): Promise<void> {
 }
 
 const CAMS: Record<string, { pos: [number, number, number]; look: [number, number, number]; fov: number }> = {
-  hero: { pos: [4.4, 1.45, -2.4], look: [0.2, 1.15, 2.0], fov: 60 },
-  shaft: { pos: [6.8, 1.7, 4.6], look: [0, 1.2, -0.5], fov: 66 },
-  char: { pos: [2.4, 1.45, 0.7], look: [0.6, 1.1, 2.6], fov: 45 },
-  guns: { pos: [3.3, 1.55, -1.5], look: [2.75, 1.0, -0.65], fov: 45 },
-  fp: { pos: [5.6, 1.62, -3.4], look: [0.4, 1.45, 1.6], fov: 72 },
-  fpcells: { pos: [-16.5, 1.62, -8.4], look: [-6, 1.45, -8.0], fov: 72 },
-  boiler: { pos: [-15.5, 1.7, 7.4], look: [-4, 2.2, 12.5], fov: 68 },
-  cells: { pos: [-17.5, 1.65, -8.0], look: [-2, 1.2, -8.6], fov: 66 },
-  lockers: { pos: [-10.0, 1.65, -4.8], look: [-17, 1.1, 2.5], fov: 68 },
-  spawn: { pos: [-20.5, 1.65, -4.5], look: [-24, 1.2, 3], fov: 70 },
+  // soldier at the collapse's north-west corner, the split stairs and balcony behind
+  hero: { pos: [-2.4, 1.5, 5.4], look: [-7.6, 1.5, 7.6], fov: 60 },
+  // from the north balcony down into the pit, moonlight and the riser
+  shaft: { pos: [-4.6, 4.9, 8.95], look: [0.6, -2.4, -1.2], fov: 68 },
+  char: { pos: [-5.5, 1.45, 5.5], look: [-7.4, 1.1, 7.0], fov: 45 },
+  guns: { pos: [-4.3, 1.55, 6.1], look: [-5.0, 1.0, 7.4], fov: 45 },
+  fp: { pos: [-8.6, 1.62, 6.2], look: [0, 0.2, -1.5], fov: 72 },
+  fpcells: { pos: [-9.4, 1.62, -12.8], look: [3, 1.6, -14.8], fov: 72 },
+  boiler: { pos: [-9.8, 1.7, 12.1], look: [1.0, 2.8, 19.5], fov: 70 },
+  cells: { pos: [-9.6, 1.7, -10.4], look: [5.0, 2.6, -19.0], fov: 68 },
+  lockers: { pos: [-12.0, 1.65, -7.8], look: [-20.0, 1.1, 2.5], fov: 68 },
+  spawn: { pos: [-25.4, 1.65, -6.4], look: [-33.0, 1.2, 2.5], fov: 70 },
+  // down in the pit: the pump and its riser, the lit crawl space beyond
+  cistern: { pos: [-5.0, -1.15, 4.0], look: [3.4, -1.9, -1.6], fov: 72 },
+  catwalk: { pos: [-21.4, 4.82, 22.9], look: [0, 3.0, 17.0], fov: 70 },
 };
 
 async function scene(renderer: Renderer, assets: Assets, params: URLSearchParams): Promise<void> {
@@ -66,22 +72,23 @@ async function scene(renderer: Renderer, assets: Assets, params: URLSearchParams
   sc.fog = new THREE.FogExp2(0x0b0f14, 0.028);
   sc.add(view.root);
 
-  // Soldier holding the Halberd beside the pillar
+  // Soldier holding the Halberd at the collapse's north-west corner, watching the pit
   const soldier = new SoldierView(assets.materials, assets.soldiers.red, 0);
   sc.add(soldier.root);
-  soldier.update(standing({ x: 0.6, z: 2.6, yaw: -0.55, pitch: -0.12, weapon: 'halberd' }), 1 / 60);
+  soldier.update(standing({ x: -7.4, z: 6.9, yaw: -0.85, pitch: -0.12, weapon: 'halberd' }), 1 / 60);
 
   // Weapons laid on a crate in the foreground
+  const C = { x: -5.0, z: 7.4 };
   const crate = PROPS.crate.build(assets.materials, 0);
-  crate.position.set(2.75, 0, -0.65);
+  crate.position.set(C.x, 0, C.z);
   crate.rotation.y = 0.35;
   sc.add(crate);
   const rook = buildWeapon(assets.materials, 'rook9');
-  rook.root.position.set(2.62, 1.03, -0.5);
+  rook.root.position.set(C.x - 0.13, 1.03, C.z + 0.15);
   rook.root.rotation.set(0, 0.35 + Math.PI / 2 + 0.25, Math.PI / 2);
   sc.add(rook.root);
   const warden = buildWeapon(assets.materials, 'warden');
-  warden.root.position.set(2.95, 1.022, -0.85);
+  warden.root.position.set(C.x + 0.2, 1.022, C.z - 0.2);
   warden.root.rotation.set(0, -0.9, Math.PI / 2);
   sc.add(warden.root);
 
@@ -94,8 +101,8 @@ async function scene(renderer: Renderer, assets: Assets, params: URLSearchParams
   cam.lookAt(...cv.look);
 
   // Settle lights then bake the reflection probe from the room center.
-  view.lights.settle(new THREE.Vector3(0, 1.7, 0), 0);
-  const env = bakeReflectionProbe(renderer.gl, sc, new THREE.Vector3(0, 1.7, 0), quality.reflectionProbeSize);
+  view.lights.settle(new THREE.Vector3(...envProbePos(map)), 0);
+  const env = bakeReflectionProbe(renderer.gl, sc, new THREE.Vector3(...envProbePos(map)), quality.reflectionProbeSize);
   assets.materials.setEnvMap(env);
   view.setEnvMap(env);
   view.lights.settle(cam.position, 0, cam.getWorldDirection(new THREE.Vector3()));
