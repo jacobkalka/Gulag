@@ -4,7 +4,7 @@ import { QUALITY_PRESETS, type QualityLevel } from '@/engine/quality';
 import { Assets } from '@/assets/Assets';
 import { buildWeapon, weaponIds } from '@/assets/models/weapons';
 import { SoldierView } from '@/game/view/soldier/SoldierView';
-import type { RenderPlayer } from '@/game/view/CharacterView';
+import type { RenderPlayer } from '@/game/view/renderPlayer';
 import { buildSublevel9 } from '@/game/world/sublevel9';
 import { MapView } from '@/game/view/MapView';
 import { bakeReflectionProbe } from '@/game/view/ReflectionProbe';

@@ -81,6 +81,22 @@ describe('netplay over a simulated network', () => {
     expect(c.cs.ping()).toBeLessThan(160);
   });
 
+  it('a hitch does not leave the ping high afterwards', () => {
+    const c = setup(GOOD);
+    runUntil(c, () => c.cs.round.phase === 'live', 8);
+    const normal = c.cs.ping();
+    // a pong for a ping sent in the lobby, before the match existed, is ignored
+    c.cs.onPong(0);
+    expect(c.cs.ping()).toBe(normal);
+    // a stall on either end (loading the match, a GC pause) answers a burst of pings late at once
+    for (const late of [3000, 2000, 1000]) c.cs.onPong(c.net.now - late);
+    expect(c.cs.ping()).toBeGreaterThan(500);
+    // a few seconds of normal pings later the scoreboard shows the real latency again
+    runUntil(c, () => false, 4);
+    expect(c.cs.ping()).toBeGreaterThan(80);
+    expect(c.cs.ping()).toBeLessThan(160);
+  });
+
   it('predicts the local player identically to the host (small corrections only)', () => {
     const c = setup(GOOD);
     runUntil(c, () => c.hs.round.phase === 'live', 8);

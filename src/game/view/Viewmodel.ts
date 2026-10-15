@@ -2,9 +2,10 @@ import * as THREE from 'three';
 import type { MaterialLibrary } from '@/assets/materials';
 import { buildWeapon, type WeaponModel } from '@/assets/models/weapons';
 import { capsule, cyl, merge, rbox, torus, xf, type Geo } from '@/assets/geometry/toolkit';
-import { GRIPS, leftGrip, solveArm, wristTarget } from '@/assets/models/character';
+import { GRIPS, leftGrip, solveArm, wristTarget } from '@/assets/models/arms';
 import { clamp, damp, lerp } from '@/shared/math';
 import { radialTexture } from '@/assets/textures/canvasTextures';
+import type { SoldierSkin } from './soldier/soldierAssets';
 
 // First-person viewmodel: gloved arms solved onto the weapon with 2-bone IK, procedural
 // hip / ADS / sprint poses, sway, bob, recoil kick, and reload/swap/inspect animations.
@@ -48,7 +49,7 @@ function handMesh(lib: MaterialLibrary, side: 1 | -1, curl: number): THREE.Group
 }
 
 function buildArm(lib: MaterialLibrary, side: 1 | -1, curl: number): { shoulder: THREE.Group; elbow: THREE.Group; hand: THREE.Group } {
-  const fabric = lib.tinted('fabricA', 0x9a9a92, 'fpSleeve');
+  const fabric = lib.get('sleeveCamo');
   const glove = lib.get('leather');
   const accent = lib.get('teamA');
   const shoulder = new THREE.Group();
@@ -59,11 +60,14 @@ function buildArm(lib: MaterialLibrary, side: 1 | -1, curl: number): { shoulder:
   hand.position.y = -FORE;
   elbow.add(hand);
   const up = new THREE.Mesh(merge([capsule(0.058, 0.2, 3, 12, { p: [0, -0.15, 0] })]), fabric);
+  up.userData.sleeve = true;
   shoulder.add(up);
   const band = new THREE.Mesh(cyl(0.061, 0.061, 0.02, 14, { p: [0, -0.1, 0] }), accent);
   shoulder.add(band);
   const fore: Geo[] = [capsule(0.05, 0.16, 3, 12, { p: [0, -0.11, 0] }), torus(0.05, 0.015, 6, 14, Math.PI * 2, { p: [0, -0.05, 0], r: [Math.PI / 2, 0, 0] })];
-  elbow.add(new THREE.Mesh(merge(fore), fabric));
+  const foreMesh = new THREE.Mesh(merge(fore), fabric);
+  foreMesh.userData.sleeve = true;
+  elbow.add(foreMesh);
   elbow.add(new THREE.Mesh(cyl(0.047, 0.044, 0.07, 12, { p: [0, -0.235, 0] }), glove));
   hand.add(handMesh(lib, side, curl));
   for (const o of [shoulder]) o.traverse((c) => ((c as THREE.Mesh).castShadow = false));
@@ -361,6 +365,17 @@ export class Viewmodel {
     shoulder.position.copy(base);
     if (len > REACH) shoulder.position.addScaledVector(d, (len - REACH) / len);
     shoulder.updateMatrixWorld(true);
+  }
+
+  /** Sleeves match the local player's soldier skin (black-and-red or woodland camo). */
+  setSkin(skin: SoldierSkin): void {
+    const mat = this.lib.get(skin === 'red' ? 'sleeveRed' : 'sleeveCamo');
+    for (const arm of [this.armR, this.armL]) {
+      arm.shoulder.traverse((c) => {
+        const m = c as THREE.Mesh;
+        if (m.isMesh && m.userData.sleeve) m.material = mat;
+      });
+    }
   }
 
   setTeamAccent(team: 0 | 1): void {

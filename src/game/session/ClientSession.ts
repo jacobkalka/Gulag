@@ -99,6 +99,8 @@ export class ClientSession implements MatchSession {
   private predictedShots = new Set<number>();
   private scratch: GameEvent[] = [];
   private rtt = 0;
+  private rttSamples: number[] = [];
+  private createdAt: number;
   private lastPingAt = -1e9;
   private rawGrenades: { g: GrenadeState; at: number }[] = [];
   private pings = new Map<number, number>();
@@ -116,6 +118,7 @@ export class ClientSession implements MatchSession {
     this.rules = pl.rules;
     this.world = o.world ?? CollisionWorld.fromMap(o.map, pl.rules.mapTags);
     this.now = o.now ?? (() => performance.now());
+    this.createdAt = this.now();
     for (const info of o.start.players) {
       const p = makePlayer({ id: info.id, team: info.team, name: info.name, bot: info.bot, loadout: info.loadout, touchpad: info.touchpad });
       p.alive = false;
@@ -288,8 +291,15 @@ export class ClientSession implements MatchSession {
   }
 
   onPong(sentAt: number): void {
-    const sample = Math.max(0, this.now() - sentAt);
-    this.rtt = this.rtt === 0 ? sample : this.rtt + (sample - this.rtt) * 0.2;
+    // a ping sent before the match (from the lobby) says nothing about this link
+    if (sentAt < this.createdAt) return;
+    // median of the last few samples: a hitch on either end (loading the match, a GC pause)
+    // answers a burst of pings late at once, and an average would show that as lag for many
+    // seconds afterwards
+    this.rttSamples.push(Math.max(0, this.now() - sentAt));
+    if (this.rttSamples.length > 5) this.rttSamples.shift();
+    const sorted = [...this.rttSamples].sort((a, b) => a - b);
+    this.rtt = sorted[sorted.length >> 1];
   }
 
   /** The host went away or the connection dropped. */

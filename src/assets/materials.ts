@@ -76,8 +76,8 @@ const DEFS: Record<string, MatDef> = {
   tritium: { color: 0x000000, emissive: 0x6dff8a, emissiveIntensity: 4, exempt: EMITTER },
   accentOrange: { color: 0x000000, emissive: 0xff6a13, emissiveIntensity: 3, rough: 0.5, exempt: EMITTER },
   // --- Characters
-  fabricA: { tex: 'fabricA', env: 0.5 },
-  fabricB: { tex: 'fabricB', env: 0.5 },
+  sleeveRed: { tex: 'sleeveRed', env: 0.5 },
+  sleeveCamo: { tex: 'sleeveCamo', env: 0.5 },
   armor: { tex: 'armor', env: 0.8 },
   leather: { tex: 'leather', env: 0.6 },
   visor: { color: 0x07090b, rough: 0.08, metal: 0.6, env: 1.8, physical: true, exempt: 'coated optic: clear-coat reflections only' },

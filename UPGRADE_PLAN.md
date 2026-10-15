@@ -48,27 +48,28 @@ crossing the scope view. The art test camera views look clean rather than lived-
 
 Both are clean A-pose characters with empty hands, which is ideal for automatic rigging.
 
-Pipeline (`tools/soldiers/build.py`, Blender `bpy` headless). Steps 1-7 are offline, step 8 is runtime:
-1. Decompress meshopt, import, rotate to -Z forward, scale to 1.80 m, feet at the origin.
-2. Decimate to LOD0 about 24k triangles, LOD1 about 8k, LOD2 about 2.5k, preserving UV seams. Bake the
-   high-poly normal detail into a new tangent-space normal map for LOD0 so the decimated silhouette keeps
-   the detail.
-3. Fit a humanoid skeleton to the mesh: joints found from cross-sections and limb analysis, then
-   verified with overlay renders. Bone names match the engine's rig (hips, spine, chest, neck, head,
-   clavicles, upper/lower arms, hands, fingers, thighs, shins, feet, toes).
-4. Skin with bone-heat weights. If the heat solve fails on the non-manifold scan mesh, compute weights
-   on a voxel-remeshed proxy and transfer them. Then smooth, limit to 4 influences and normalize.
-5. Textures: 2048² for LOD0 and 1024² for LOD1/LOD2, encoded as KTX2 (UASTC for normals, ETC1S for
-   color/ORM). Geometry compressed with meshopt.
-6. Write `public/assets/soldiers/{red,camo}.glb` and render turntable proofs.
-7. **Animation**: no mocap library is reachable, so clips are authored in code. An IK-driven gait
-   generator plants the feet at exactly the ground speed, so there is no foot sliding by construction.
-   It covers 8-way walk, run, sprint, crouch, jump, slide and mantle; key-posed clips cover reload per
-   class, swap, hit reactions and death variants.
-8. At runtime, `THREE.AnimationMixer` runs them in a state machine with crossfades, a 2D locomotion blend
-   space and speed-synced playback. Upper-body aim offset and two-handed weapon IK are applied on top.
-   **Fallback:** if the procedural clips look stiff, the next step from the request is to ask for
-   Mixamo-rigged exports and animations, which the same runtime can load.
+Pipeline as built (`tools/soldiers/build.sh`: Node + Blender `bpy` headless, see
+[`tools/soldiers/README.md`](tools/soldiers/README.md)). Steps 1-3 run offline, step 4 at runtime:
+1. `simplify.mjs`: meshopt simplification from 1.9 M to about 24k triangles, keeping UV seams. One LOD;
+   more only if the M8 perf pass needs them.
+2. `rig.py`: normalize (1.80 m, forward snapped to the nearest axis then turned to -Z, feet at the
+   origin) and fit a 26-bone humanoid skeleton from cross-sections (crotch clamped to 0.43-0.49 of the
+   height, shoulders from the armpits). Bone heat failed on the scan mesh (0 of 16.5k vertices
+   weighted) and the voxel proxy fused the arms to the torso, so the weights come from a geodesic
+   segmentation with radius-normalized seeds. The skin bridges where limbs touch are cut and refilled
+   with copied UVs, and weights are blended by inverse distance inside each segment. Bend-test proofs
+   render to `work/proofs/`.
+3. `finalize.mjs`: 2048² WebP textures (normals lossless) and meshopt geometry, written to
+   `public/assets/soldiers/{red,camo}.glb` (3.0 / 4.7 MB). KTX2 needs `toktx`, so it moved to M8.
+4. **Animation** is procedural, with no clips: `SoldierAnimator` poses the skeleton every frame through
+   a model-space pose layer (`SoldierRig`). Its parts:
+   - a speed-synced gait with planted feet, which covers any direction, so the 8-way blend comes
+     with it;
+   - crouch, sprint, jump, slide, ADS, reload, hit flinch and death, crossfaded by state weights;
+   - aim split over the spine and head;
+   - both hands IK-solved onto the weapon's grips.
+
+   The Mixamo fallback was not needed.
 
 ## 4. Key design decisions
 
@@ -187,19 +188,19 @@ Status: ☐ open, ☑ done (verified by running it), ◐ partial (see notes).
 | Item | M | Status |
 |---|---|---|
 | 3A Inspect GLBs (skeleton, materials, polycount, scale, orientation) | 0 | ☑ |
-| 3A Normalize (1.8 m, -Z forward, feet at origin), clean materials, compress | 3 | ☐ |
-| 3A Replace the old character everywhere (lobby, match, bots, spectator, end screen) | 3 | ☐ |
-| 3A Hitboxes aligned to the new skeleton | 3 | ☐ |
-| 3A Weapon on the right-hand bone, left-hand IK to the foregrip | 3 | ☐ |
-| 3B One team black-and-red, random per match, host-synced, consistent all match | 3 | ☐ |
-| 3B Relative HUD friend/enemy colors with colorblind option | 3 | ☐ |
-| 3C Rig (bpy auto-weights; Mixamo fallback) | 3 | ☐ |
-| 3C State machine with crossfades; all listed states; 8-way blend space | 3 | ☐ |
-| 3C Upper/lower body layering with aim offset | 3 | ☐ |
-| 3C No foot sliding (speed sync, foot planting/IK) | 3 | ☐ |
-| 3C Networked compact state, animation derived locally | 3 | ☐ |
-| 3C Lean into turns, head look-at, idle breathing, weapon sway | 3 | ☐ |
-| 3C `?animtest` scene with screenshots/GIFs | 3 | ☐ |
+| 3A Normalize (1.8 m, -Z forward, feet at origin), clean materials, compress | 3 | ☑ WebP + meshopt; KTX2 moved to M8 |
+| 3A Replace the old character everywhere (lobby, match, bots, spectator, end screen) | 3 | ☑ lobby, match, bots, spectator, art test (the end screen has no 3D model); old character code deleted |
+| 3A Hitboxes aligned to the new skeleton | 3 | ☑ `?animtest&hitboxes=1` overlay |
+| 3A Weapon on the right-hand bone, left-hand IK to the foregrip | 3 | ☑ weapon held in the right hand's grip frame, both hands IK'd; stays in hand on death |
+| 3B One team black-and-red, random per match, host-synced, consistent all match | 3 | ☑ `round.skinTeam` (protocol v3); first-person sleeves match |
+| 3B Relative HUD friend/enemy colors with colorblind option | 3 | ☑ already relative, 3 colorblind modes |
+| 3C Rig (bpy auto-weights; Mixamo fallback) | 3 | ☑ bpy with custom segment weights (bone heat failed) |
+| 3C State machine with crossfades; all listed states; 8-way blend space | 3 | ☑ procedural states; direction is continuous |
+| 3C Upper/lower body layering with aim offset | 3 | ☑ |
+| 3C No foot sliding (speed sync, foot planting/IK) | 3 | ☑ checked on a tiled floor |
+| 3C Networked compact state, animation derived locally | 3 | ☑ one new bit (skin team) |
+| 3C Lean into turns, head look-at, idle breathing, weapon sway | 3 | ☑ |
+| 3C `?animtest` scene with screenshots/GIFs | 3 | ☑ screenshots (no GIFs) |
 
 ### Section 4 – Scope and tracers
 | Item | M | Status |
@@ -325,4 +326,21 @@ Status: ☐ open, ☑ done (verified by running it), ◐ partial (see notes).
   - Verified: lint, typecheck, 85 unit tests, production build, `audit:shadows`, `audit:textures`
     (116 materials, 0 problems) and `audit:contrast` (7/7 cameras) pass; e2e two-tab networked
     round and touchpad mode pass. Before/after: [`screenshots/upgrade-m2/before-after.jpg`](screenshots/upgrade-m2/before-after.jpg).
-
+- **M3** the provided soldiers. Screenshots in [`screenshots/upgrade-m3/`](screenshots/upgrade-m3/).
+  - Both GLBs went through the pipeline in Section 3: 24k triangles, 26-bone rig with custom
+    segment weights (bone heat and the voxel proxy both failed on the scan meshes), WebP + meshopt.
+  - `SoldierView` replaces the old procedural character for remote players, bots, spectating,
+    the lobby stage and the art test; the old character code is gone.
+  - Procedural animation: speed-synced gait with planted feet in any direction, run, sprint,
+    crouch, crouch walk, jump, slide, ADS, aim up/down, reload, hit flinch, death, lean into
+    turns, idle breathing, and both hands IK'd onto the weapon.
+  - Team skins: the host picks which team wears black-and-red each match (`round.skinTeam`,
+    protocol v3); first-person sleeves match the local player's skin.
+  - `?animtest` shows both soldiers cycling every state on a tiled floor, with `hitboxes=1` for
+    the simulation's hitboxes.
+  - Fix found while testing: the scoreboard ping averaged pongs that a hitch at match load
+    answered late (one stale lobby pong could set it above 1000 ms for 10+ s). It now ignores
+    pre-match pongs and shows the median of the last 5 samples (unit test added).
+  - Verified: lint, typecheck, 87 unit tests, production build, `audit:textures`, e2e two-tab
+    networked round (twice in a row) and touchpad mode pass; every animtest state checked in
+    screenshots ([`animtest-sheet.jpg`](screenshots/upgrade-m3/animtest-sheet.jpg)).

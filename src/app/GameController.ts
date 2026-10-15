@@ -23,7 +23,7 @@ import { RoomController } from './rooms';
 import { buildWeapon, type WeaponModel } from '@/assets/models/weapons';
 import { SoldierView } from '@/game/view/soldier/SoldierView';
 import type { SoldierSkin } from '@/game/view/soldier/soldierAssets';
-import type { RenderPlayer } from '@/game/view/CharacterView';
+import type { RenderPlayer } from '@/game/view/renderPlayer';
 import { PerfOverlay } from '@/ui/PerfOverlay';
 
 // Owns the renderer, procedural assets, input and the frame loop. Screens (Preact) call

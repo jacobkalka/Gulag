@@ -3,7 +3,7 @@ import type { MaterialLibrary } from '@/assets/materials';
 import { buildWeapon, type WeaponModel } from '@/assets/models/weapons';
 import { getWeapon } from '@/data/weapons';
 import { angleDiff, clamp, damp, dampAngle } from '@/shared/math';
-import type { RenderPlayer } from '../CharacterView';
+import type { RenderPlayer } from '../renderPlayer';
 import { instantiate, type SoldierAsset } from './soldierAssets';
 import { SoldierRig } from './SoldierRig';
 import { SoldierAnimator } from './SoldierAnimator';

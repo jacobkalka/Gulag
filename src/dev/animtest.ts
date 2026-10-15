@@ -5,7 +5,7 @@ import { QUALITY_PRESETS } from '@/engine/quality';
 import { Assets } from '@/assets/Assets';
 import type { SoldierSkin } from '@/game/view/soldier/soldierAssets';
 import { SoldierView } from '@/game/view/soldier/SoldierView';
-import type { RenderPlayer } from '@/game/view/CharacterView';
+import type { RenderPlayer } from '@/game/view/renderPlayer';
 import { buildHitboxes } from '@/game/sim/hitboxes';
 
 // ?animtest: both soldiers side by side cycling through every animation state on a tiled floor

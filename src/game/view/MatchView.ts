@@ -13,7 +13,7 @@ import { currentSpread, recoilKick } from '@/game/sim/weaponLogic';
 import { SURFACES, OPAQUE } from '@/game/world/collision';
 import { MapView } from './MapView';
 import { Viewmodel } from './Viewmodel';
-import type { RenderPlayer } from './CharacterView';
+import type { RenderPlayer } from './renderPlayer';
 import { SoldierView } from './soldier/SoldierView';
 import { skinFor, type SoldierSkin } from './soldier/soldierAssets';
 import { Effects } from './Effects';
@@ -77,6 +77,7 @@ export class MatchView {
   private vm: Viewmodel;
   private chars = new Map<number, SoldierView>();
   private charSkin = new Map<number, SoldierSkin>();
+  private vmSkin: SoldierSkin | null = null;
   private effects: Effects;
   private grenadeMeshes = new Map<number, THREE.Mesh>();
   private env: THREE.Texture | null = null;
@@ -905,6 +906,10 @@ export class MatchView {
       }
       // team skins: one side black-and-red, the other woodland camo (host picks per match)
       const skin = skinFor(p.team, s.round.skinTeam ?? 0);
+      if (local && p.id === local.id && this.vmSkin !== skin) {
+        this.vm.setSkin(skin);
+        this.vmSkin = skin;
+      }
       if (cv && this.charSkin.get(p.id) !== skin) {
         cv.dispose();
         cv = undefined;

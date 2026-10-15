@@ -568,8 +568,9 @@ export const RECIPES: TextureRecipe[] = [
   { id: 'gunAlu', tileMeters: 0.3, hero: true, normalStrength: 0.8, colors: [[44, 45, 48]], glsl: gunAlu },
   { id: 'gunAluTan', tileMeters: 0.3, hero: false, normalStrength: 0.8, colors: [[140, 116, 84]], seed: 2, glsl: gunAlu },
   { id: 'gunWood', tileMeters: 0.4, hero: false, normalStrength: 1.2, colors: [[110, 58, 30], [60, 30, 16]], params: [0, 1, 1, 0], seed: 8, glsl: woodPlanks },
-  { id: 'fabricA', tileMeters: 0.6, hero: false, normalStrength: 1.2, colors: [[112, 112, 104], [82, 84, 80], [140, 138, 128], [58, 60, 58]], params: [1, 0, 0, 0], glsl: fabricCamo },
-  { id: 'fabricB', tileMeters: 0.6, hero: false, normalStrength: 1.2, colors: [[92, 102, 114], [68, 76, 88], [122, 132, 142], [48, 54, 64]], params: [1, 0, 0, 0], seed: 4, glsl: fabricCamo },
+  // first-person sleeves, matched to the two soldier skins (black-and-red, tan woodland camo)
+  { id: 'sleeveRed', tileMeters: 0.6, hero: false, normalStrength: 1.2, colors: [[50, 50, 52], [32, 32, 34], [74, 72, 72], [118, 26, 28]], params: [1, 0, 0, 0], seed: 7, glsl: fabricCamo },
+  { id: 'sleeveCamo', tileMeters: 0.6, hero: false, normalStrength: 1.2, colors: [[146, 124, 88], [112, 96, 66], [172, 152, 114], [84, 72, 50]], params: [1, 0, 0, 0], seed: 9, glsl: fabricCamo },
   { id: 'armor', tileMeters: 0.5, hero: false, normalStrength: 1.0, colors: [[78, 82, 74]], glsl: armorPlastic },
   { id: 'rubber', tileMeters: 0.3, hero: false, normalStrength: 1.0, colors: [[24, 24, 25]], glsl: rubber },
   { id: 'tape', tileMeters: 0.25, hero: false, normalStrength: 1.0, colors: [[205, 203, 196]], glsl: tape },
