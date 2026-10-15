@@ -167,7 +167,7 @@ export class MatchView {
     this.mapView.lights.settle(new THREE.Vector3(0, 1.7, 0), 0);
     this.env = bakeReflectionProbe(r.gl, this.scene, new THREE.Vector3(0, 1.7, 0), r.options.quality.reflectionProbeSize);
     this.o.assets.materials.setEnvMap(this.env);
-    this.scene.environmentIntensity = 0.45;
+    this.mapView.setEnvMap(this.env);
     r.setScenes(this.scene, this.camera, this.vm.scene, this.vm.camera);
     r.resize();
     this.onResize();
@@ -973,7 +973,7 @@ export class MatchView {
       const eye = new THREE.Vector3(this.pose.x, this.pose.y + MOVE.eyeStand + (MOVE.eyeCrouch - MOVE.eyeStand) * this.pose.crouch - 0.15, this.pose.z);
       others.push({ p, eye, yaw: this.pose.yaw, pitch: this.pose.pitch });
     }
-    this.flashlights.updateRemote(others, this.camera);
+    this.flashlights.updateRemote(others, this.camera, local?.team);
   }
 
   private updateViewmodel(dt: number, local: PlayerState | undefined): void {
@@ -993,7 +993,8 @@ export class MatchView {
     this.vm.scene.visible = !scoped;
     this.hud.setScope(scoped);
     const vmLights = this.mapView.lights.nearestActive(this.camera.position, 4);
-    if (local.flashlight) vmLights.unshift({ pos: this.flashlights.local.position, color: this.flashlights.local.color, intensity: 0.12, distance: 1.2 });
+    // the flashlight sits right on the gun: harsh light on the weapon and the hands
+    if (local.flashlight) vmLights.unshift({ pos: this.flashlights.local.position, color: this.flashlights.local.color, intensity: 0.3, distance: 1.4 });
     this.vm.syncFromWorld(this.camera, vmLights.slice(0, 4), this.env);
     this.mapView.probes.sample(this.camera.position, UP, this.ambUp);
     this.mapView.probes.sample(this.camera.position, DOWN, this.ambDown);

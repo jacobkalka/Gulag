@@ -18,6 +18,7 @@ const MATCH_SHOTS = [
   { name: 'hip-halberd', primary: 'halberd', kind: 'hip' },
   { name: 'hurt', primary: 'halberd', kind: 'hurt' },
   { name: 'dark', primary: 'halberd', kind: 'dark' },
+  { name: 'enemy-dark', primary: 'halberd', kind: 'enemyDark' },
 ];
 
 const browser = await chromium.launch({
@@ -111,14 +112,81 @@ async function matchShot({ name, primary, kind }) {
       g.input.pitch = -0.05;
       Object.assign(en, { x: -9, z: -8.0, vx: 0, vz: 0, yaw: Math.PI / 2, pitch: -0.05 });
     });
-    await page.waitForTimeout(1500);
+    // give eye adaptation time to settle so the two frames compare at a steady exposure
+    await page.waitForTimeout(5000);
     await page.screenshot({ path: `${outDir}/${name}-off.png`, timeout: 180000 });
     await page.evaluate(() => {
       const s = window.__game.debug().session;
       for (const p of s.players) p.flashlight = true;
     });
-    await page.waitForTimeout(1500);
+    await page.waitForTimeout(5000);
     await page.screenshot({ path: `${outDir}/${name}-on.png`, timeout: 180000 });
+    // the other player's flashlight alone, seen as an enemy and then as a teammate (enemy
+    // flashlights render dimmer). Time is frozen so the team swap can't touch round logic.
+    const lightOnly = (asMate) =>
+      page.evaluate((mate) => {
+        const g = window.__game;
+        g.frozen = true;
+        const s = g.debug().session;
+        const me = s.players.find((p) => p.id === s.localId);
+        const other = s.players.find((p) => p.id !== s.localId);
+        me.flashlight = false;
+        other.flashlight = true;
+        if (other.realTeam === undefined) other.realTeam = other.team;
+        other.team = mate ? me.team : other.realTeam;
+        for (let i = 0; i < 30; i++) g.debug().match.frame(1 / 60);
+      }, asMate);
+    await lightOnly(false);
+    await page.waitForTimeout(800);
+    await page.screenshot({ path: `${outDir}/${name}-enemylight.png`, timeout: 180000 });
+    await lightOnly(true);
+    await page.waitForTimeout(800);
+    await page.screenshot({ path: `${outDir}/${name}-matelight.png`, timeout: 180000 });
+  } else if (kind === 'enemyDark') {
+    // an enemy at the darkest spot we can see 6-14 m away: should be hard to make out until a
+    // flashlight (his or ours) gives him away
+    const placed = await page.evaluate(() => {
+      const g = window.__game;
+      const s = g.debug().session;
+      const mv = g.debug().match.mapView;
+      const me = s.players.find((p) => p.id === s.localId);
+      const en = s.players.find((p) => p.id !== s.localId);
+      const P = mv.probes;
+      const V3 = P.min.constructor;
+      const col = () => ({ r: 0, g: 0, b: 0, setRGB(r, g, b) { this.r = r; this.g = g; this.b = b; return this; } });
+      const lum = (c) => 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+      const dirs = [[0, 1, 0], [0, -1, 0], [1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1]];
+      const light = (x, z) => dirs.reduce((a, d) => a + lum(P.sample(new V3(x, 1.2, z), new V3(...d), col())), 0) / 6;
+      // stand mid-corridor and pick the darkest visible standing spot
+      Object.assign(me, { x: -12, z: -8.2, vx: 0, vz: 0 });
+      let best = null;
+      for (let x = -24; x <= 24; x += 0.5) {
+        for (let z = -16.5; z <= 16.5; z += 0.5) {
+          const d = Math.hypot(x - me.x, z - me.z);
+          if (d < 6 || d > 14) continue;
+          if (s.world.cylinderBlocked(x, 0.05, z, 0.4, 1.75)) continue;
+          if (!s.world.lineOfSight(me.x, 1.6, me.z, x, 1.3, z)) continue;
+          const l = light(x, z);
+          if (l <= 0.004) continue; // inside geometry / unlit void
+          if (!best || l < best.l) best = { x, z, l, d };
+        }
+      }
+      if (!best) return null;
+      Object.assign(en, { x: best.x, z: best.z, vx: 0, vz: 0, yaw: Math.atan2(-(me.x - best.x), -(me.z - best.z)), pitch: 0 });
+      g.input.yaw = Math.atan2(-(best.x - me.x), -(best.z - me.z));
+      g.input.pitch = -0.06;
+      return best;
+    });
+    console.log('enemy-dark spot', JSON.stringify(placed));
+    await page.waitForTimeout(1500);
+    await page.screenshot({ path: `${outDir}/${name}-off.png`, timeout: 180000 });
+    await page.evaluate(() => {
+      const s = window.__game.debug().session;
+      const me = s.players.find((p) => p.id === s.localId);
+      me.flashlight = true;
+    });
+    await page.waitForTimeout(1500);
+    await page.screenshot({ path: `${outDir}/${name}-mine.png`, timeout: 180000 });
   } else if (kind === 'hurt') {
     // freeze real time so the transient effects can be captured deterministically
     const hurt = (amount, frames, setHp) =>

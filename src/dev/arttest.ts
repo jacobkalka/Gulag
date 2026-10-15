@@ -17,7 +17,13 @@ import { DEFAULT_SETTINGS } from '@/app/settings';
 //   #/arttest            – map section + character + weapons under final lighting
 //   #/arttest/guns       – weapon lineup under studio light
 //   Query: ?q=low|medium|high|ultra  &cam=<name>
+/** Fixed cameras per map used by screenshots and `npm run audit:contrast`. */
+export const ART_CAMS: Record<string, string[]> = {
+  sublevel9: ['hero', 'shaft', 'boiler', 'cells', 'lockers', 'spawn', 'fpcells'],
+};
+
 export async function runArtTest(canvas: HTMLCanvasElement): Promise<void> {
+  (window as unknown as { __artCams: unknown }).__artCams = ART_CAMS;
   const parts = location.hash.split('/');
   const mode = parts[2] ?? 'scene';
   const params = new URLSearchParams(location.hash.split('?')[1] ?? '');
@@ -92,7 +98,9 @@ async function scene(renderer: Renderer, assets: Assets, params: URLSearchParams
   sc.add(warden.root);
 
   const camName = params.get('cam') ?? 'hero';
-  const cv = CAMS[camName] ?? CAMS.hero;
+  // free camera for inspection: cam=free&pos=x,y,z&look=x,y,z&fov=60
+  const v3 = (k: string) => (params.get(k) ?? '').split(',').map(Number) as [number, number, number];
+  const cv = camName === 'free' ? { pos: v3('pos'), look: v3('look'), fov: Number(params.get('fov') ?? 60) } : (CAMS[camName] ?? CAMS.hero);
   const cam = new THREE.PerspectiveCamera(cv.fov, 16 / 9, 0.05, 200);
   cam.position.set(...cv.pos);
   cam.lookAt(...cv.look);
@@ -101,8 +109,8 @@ async function scene(renderer: Renderer, assets: Assets, params: URLSearchParams
   view.lights.settle(new THREE.Vector3(0, 1.7, 0), 0);
   const env = bakeReflectionProbe(renderer.gl, sc, new THREE.Vector3(0, 1.7, 0), quality.reflectionProbeSize);
   assets.materials.setEnvMap(env);
-  sc.environmentIntensity = 0.45;
-  view.lights.settle(cam.position, 0);
+  view.setEnvMap(env);
+  view.lights.settle(cam.position, 0, cam.getWorldDirection(new THREE.Vector3()));
 
   // First-person views: viewmodel with the chosen weapon (hip or ADS)
   let vm: Viewmodel | null = null;
@@ -120,6 +128,7 @@ async function scene(renderer: Renderer, assets: Assets, params: URLSearchParams
   let frames = 0;
   const start = performance.now();
   const stats = (window as any).__stats;
+  (window as any).__artView = view;
   const loop = () => {
     const t = (performance.now() - start) / 1000;
     view.update(cam, t + 3, 1 / 60);

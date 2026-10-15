@@ -224,6 +224,7 @@ export class LightRig {
       depthWrite: false,
       blending: THREE.AdditiveBlending,
     });
+    this.haloMat.userData.textureExempt = 'light effect: additive halo shader';
     this.coneMat = new THREE.ShaderMaterial({
       vertexShader: CONE_VERT,
       fragmentShader: CONE_FRAG,
@@ -233,6 +234,7 @@ export class LightRig {
       blending: THREE.AdditiveBlending,
       side: THREE.DoubleSide,
     });
+    this.coneMat.userData.textureExempt = 'light effect: volumetric cone shader';
     this.buildHalos();
     this.buildCones();
   }
@@ -261,6 +263,7 @@ export class LightRig {
     mesh.frustumCulled = false;
     mesh.renderOrder = 6;
     mesh.name = 'fx:halos';
+    mesh.userData.shadowExempt = 'light effect: additive glow, no surface';
     this.group.add(mesh);
     this.haloMesh = mesh;
   }
@@ -291,6 +294,7 @@ export class LightRig {
     mesh.frustumCulled = false;
     mesh.renderOrder = 5;
     mesh.name = 'fx:cones';
+    mesh.userData.shadowExempt = 'light effect: fake volumetric cone, no surface';
     this.group.add(mesh);
     this.coneMesh = mesh;
   }
@@ -328,7 +332,12 @@ export class LightRig {
     return 0.82 + 0.18 * Math.sin(t * 1.7 + seed);
   }
 
-  update(camPos: THREE.Vector3, t: number, dt: number): void {
+  /**
+   * Animates fixtures and hands the real-time light slots to the fixtures that matter most for
+   * this view. `camDir` (unit forward vector) favors lights in front of the camera; without it
+   * only distance counts.
+   */
+  update(camPos: THREE.Vector3, t: number, dt: number, camDir?: THREE.Vector3): void {
     const n = this.fx.length;
     // --- behaviors
     for (let i = 0; i < n; i++) {
@@ -361,7 +370,14 @@ export class LightRig {
       const dy = s.pos.y - camPos.y;
       const dz = s.pos.z - camPos.z;
       const dist2 = dx * dx + dy * dy + dz * dz;
-      return (d.intensity * (1 + (d.priority ?? 0) * 0.5)) / (1 + dist2 / (d.distance * d.distance * 0.35)) + bonus;
+      // lights ahead light what you see; ones behind still spill forward, so they only lose some weight
+      let facing = 1;
+      if (camDir && dist2 > 1) {
+        const c = (dx * camDir.x + dy * camDir.y + dz * camDir.z) / Math.sqrt(dist2);
+        const k = Math.min(1, Math.max(0, (c + 0.6) / 1.2));
+        facing = 0.5 + 0.5 * k * k * (3 - 2 * k);
+      }
+      return ((d.intensity * (1 + (d.priority ?? 0) * 0.5)) / (1 + dist2 / (d.distance * d.distance * 0.35))) * facing + bonus;
     };
     // --- shadowed spots: lights flagged for shadows, plus directional fixtures
     const spotTaken = new Set<number>();
@@ -503,8 +519,8 @@ export class LightRig {
   }
 
   /** Snap all fades to their targets and render every shadow map (screenshots / first frame). */
-  settle(camPos: THREE.Vector3, t: number): void {
-    for (let i = 0; i < 20; i++) this.update(camPos, t, 0.1);
+  settle(camPos: THREE.Vector3, t: number, camDir?: THREE.Vector3): void {
+    for (let i = 0; i < 20; i++) this.update(camPos, t, 0.1, camDir);
     for (const s of this.spots) s.shadow.needsUpdate = true;
   }
 }

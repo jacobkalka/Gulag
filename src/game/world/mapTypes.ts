@@ -26,6 +26,8 @@ export interface Brush {
   shadow?: boolean;
   /** Group tag used by playlist-dependent shutters, etc. */
   tag?: string;
+  /** Walkable floor slab (gets floor grime decals; nav hint). */
+  walk?: boolean;
 }
 
 /** Wedge: AABB footprint whose top slopes up along +axis (dir 1) or -axis (dir -1). */
@@ -136,4 +138,6 @@ export interface MapDef {
   skyHoles: { min: V3; max: V3 }[];
   /** Directional moonlight direction (pointing from the moon toward the ground). */
   moonDir: V3;
+  /** Floors get wet (puddles, rain, leaks) only below this height (default 0.6 m). */
+  wetMaxY?: number;
 }

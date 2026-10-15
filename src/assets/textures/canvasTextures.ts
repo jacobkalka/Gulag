@@ -18,6 +18,72 @@ function toTexture(c: HTMLCanvasElement, srgb = true): THREE.CanvasTexture {
   return t;
 }
 
+/**
+ * Tangent-space normal map (OpenGL convention, +Y = up in the image) from a height field in 0..1,
+ * one value per pixel, row 0 at the top of the image.
+ */
+export function heightToNormalTexture(h: Float32Array, W: number, H: number, strength: number, wrap = false): THREE.CanvasTexture {
+  const [c, g] = canvas(W, H);
+  const img = g.createImageData(W, H);
+  const at = (x: number, y: number) => {
+    if (wrap) {
+      x = (x + W) % W;
+      y = (y + H) % H;
+    } else {
+      x = Math.min(W - 1, Math.max(0, x));
+      y = Math.min(H - 1, Math.max(0, y));
+    }
+    return h[y * W + x];
+  };
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const nx = -(at(x + 1, y) - at(x - 1, y)) * 0.5 * strength;
+      const ny = -(at(x, y - 1) - at(x, y + 1)) * 0.5 * strength;
+      const l = Math.hypot(nx, ny, 1);
+      const i = (y * W + x) * 4;
+      img.data[i] = (nx / l) * 127.5 + 127.5;
+      img.data[i + 1] = (ny / l) * 127.5 + 127.5;
+      img.data[i + 2] = (1 / l) * 127.5 + 127.5;
+      img.data[i + 3] = 255;
+    }
+  }
+  g.putImageData(img, 0, 0);
+  return toTexture(c, false);
+}
+
+/** Separable box blur of a height field (radius in pixels), in place. */
+function blurField(h: Float32Array, W: number, H: number, r: number): void {
+  const tmp = new Float32Array(h.length);
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      let s = 0;
+      for (let k = -r; k <= r; k++) s += h[y * W + Math.min(W - 1, Math.max(0, x + k))];
+      tmp[y * W + x] = s / (2 * r + 1);
+    }
+  }
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      let s = 0;
+      for (let k = -r; k <= r; k++) s += tmp[Math.min(H - 1, Math.max(0, y + k)) * W + x];
+      h[y * W + x] = s / (2 * r + 1);
+    }
+  }
+}
+
+/**
+ * Normal map for painted signs and graffiti: the paint film is a hair thicker than the wall, so
+ * letter edges and worn specks catch grazing light.
+ */
+export function paintNormalTexture(src: HTMLCanvasElement): THREE.CanvasTexture {
+  const W = src.width;
+  const H = src.height;
+  const d = src.getContext('2d')!.getImageData(0, 0, W, H).data;
+  const h = new Float32Array(W * H);
+  for (let i = 0; i < W * H; i++) h[i] = d[i * 4 + 3] / 255;
+  blurField(h, W, H, 1);
+  return heightToNormalTexture(h, W, H, 3.0);
+}
+
 export type ReticleStyle = 'holo' | 'dot' | 'chevron' | 'scope';
 
 /** Emissive reticle (white on black, tinted by the material color, drawn additively). */

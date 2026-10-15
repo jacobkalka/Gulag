@@ -118,8 +118,10 @@ export class Atmosphere {
         depthWrite: false,
       }),
     );
+    (sky.material as THREE.Material).userData.textureExempt = 'sky dome: procedural night sky shader';
     sky.renderOrder = -10;
     sky.frustumCulled = false;
+    sky.userData.shadowExempt = 'sky dome: infinitely far background';
     this.group.add(sky);
 
     // Moonlight: a distant, narrow shadowed spotlight aimed through each sky opening.
@@ -197,6 +199,8 @@ export class Atmosphere {
         const mesh = new THREE.Mesh(g, mat);
         mesh.renderOrder = 5;
         mesh.frustumCulled = false;
+        mesh.userData.shadowExempt = 'light effect: volumetric moon shaft';
+        mat.userData.textureExempt = 'light effect: volumetric moon shaft shader';
         this.group.add(mesh);
         this.shafts.push(mat);
       }
@@ -263,6 +267,7 @@ export class Atmosphere {
         transparent: true,
         depthWrite: false,
       });
+      mat.userData.textureExempt = 'particles: dust motes';
       const pts = new THREE.Points(g, mat);
       pts.frustumCulled = false;
       pts.renderOrder = 6;

@@ -22,8 +22,8 @@ void surface(vec2 uv, out vec3 albedo, out float height, out float rough, out fl
   float med = fbm01(uv * 11.0 + 7.3, vec2(11.0), 4);
   float fine = vnoise(uv * 190.0, vec2(190.0)) * 0.5 + vnoise(uv * 95.0, vec2(95.0)) * 0.5;
   vec3 v = voronoi(uv * 70.0, vec2(70.0));
-  float pit = smoothstep(0.22, 0.04, v.x) * step(0.78, v.z);
-  float bigPit = smoothstep(0.3, 0.08, voronoi(uv * 18.0, vec2(18.0)).x) * step(0.93, voronoi(uv * 18.0, vec2(18.0)).z);
+  float pit = (1.0 - smoothstep(0.04, 0.22, v.x)) * step(0.78, v.z);
+  float bigPit = (1.0 - smoothstep(0.08, 0.3, voronoi(uv * 18.0, vec2(18.0)).x)) * step(0.93, voronoi(uv * 18.0, vec2(18.0)).z);
   // Vertical moisture streaks.
   float streak = fbm01(vec2(uv.x * 26.0, uv.y * 2.0) + vec2(0.0, large * 0.6), vec2(26.0, 2.0), 4);
   streak = smoothstep(0.52, 0.8, streak) * (0.35 + 0.65 * large);
@@ -66,8 +66,8 @@ void surface(vec2 uv, out vec3 albedo, out float height, out float rough, out fl
   float stain = smoothstep(0.6, 0.85, fbm01(uv * 5.0 + 1.3, vec2(5.0), 5));
   // Water pooling in low areas.
   float undul = fbm(uv * 2.0 + 4.4, vec2(2.0), 4);
-  float wet = smoothstep(-0.05, -0.2, undul);
-  float puddle = smoothstep(-0.22, -0.3, undul);
+  float wet = (1.0 - smoothstep(-0.2, -0.05, undul));
+  float puddle = (1.0 - smoothstep(-0.3, -0.22, undul));
   vec3 c0 = srgb(uC0);
   vec3 c1 = srgb(uC1);
   vec3 base = mix(c0, c1, large);
@@ -170,8 +170,8 @@ void surface(vec2 uv, out vec3 albedo, out float height, out float rough, out fl
   float a = fbm01(uv * 4.0, vec2(4.0), 6);
   float b = fbm01(uv * 16.0 + 3.0, vec2(16.0), 5);
   vec3 vo = voronoi(uv * 22.0, vec2(22.0));
-  float flake = smoothstep(0.1, 0.0, vo.y - vo.x) ;
-  float pits = smoothstep(0.2, 0.05, voronoi(uv * 90.0, vec2(90.0)).x);
+  float flake = (1.0 - smoothstep(0.0, 0.1, vo.y - vo.x)) ;
+  float pits = (1.0 - smoothstep(0.05, 0.2, voronoi(uv * 90.0, vec2(90.0)).x));
   float bare = smoothstep(0.62, 0.7, a) * (1.0 - smoothstep(0.4, 0.7, b));
   vec3 rust1 = srgbHex(58.0, 36.0, 24.0);
   vec3 rust2 = srgbHex(150.0, 82.0, 34.0);
@@ -255,13 +255,15 @@ void surface(vec2 uv, out vec3 albedo, out float height, out float rough, out fl
 const plasterPaint = /* glsl */ `
 void surface(vec2 uv, out vec3 albedo, out float height, out float rough, out float ao, out float metal) {
   vec2 w = uv + vec2(fbm(uv * 5.0, vec2(5.0), 4), fbm(uv * 5.0 + 3.3, vec2(5.0), 4)) * 0.03;
-  float peelN = fbm01(w * 5.0, vec2(5.0), 6);
-  float peel = smoothstep(0.7, 0.72, peelN);
-  float peelEdge = smoothstep(0.66, 0.7, peelN) - peel;
+  // peeling patches come from decals now (unique per wall); the tiling texture keeps only
+  // rare small chips so nothing big repeats every tile
+  float peelN = fbm01(w * 9.0, vec2(9.0), 5);
+  float peel = smoothstep(0.82, 0.83, peelN);
+  float peelEdge = smoothstep(0.79, 0.82, peelN) - peel;
   float stain = smoothstep(0.5, 0.9, fbm01(vec2(uv.x * 10.0, uv.y * 2.0) + vec2(0.0, fbm(uv * 2.0, vec2(2.0), 3)), vec2(10.0, 2.0), 5));
   float grime = smoothstep(0.4, 0.9, fbm01(uv * 2.0 + 7.0, vec2(2.0), 5));
   vec2 ve = voronoiEdge(w * 4.0, vec2(4.0));
-  float crack = (1.0 - smoothstep(0.0, 0.012, ve.x)) * smoothstep(0.6, 0.75, fbm01(uv * 3.0 + 4.0, vec2(3.0), 4));
+  float crack = (1.0 - smoothstep(0.0, 0.01, ve.x)) * smoothstep(0.72, 0.8, fbm01(uv * 3.0 + 4.0, vec2(3.0), 4));
   float orange = vnoise(uv * 300.0, vec2(300.0));
   vec3 paint = srgb(uC0) * (0.93 + 0.1 * fbm01(uv * 14.0, vec2(14.0), 3));
   vec3 under = srgb(uC1) * (0.8 + 0.3 * vnoise(uv * 90.0, vec2(90.0)));
@@ -350,7 +352,7 @@ void surface(vec2 uv, out vec3 albedo, out float height, out float rough, out fl
 const gunPolymer = /* glsl */ `
 void surface(vec2 uv, out vec3 albedo, out float height, out float rough, out float ao, out float metal) {
   vec3 v = voronoi(uv * uP0.x, vec2(uP0.x));
-  float stipple = smoothstep(0.55, 0.0, v.x) * uP0.y;
+  float stipple = (1.0 - smoothstep(0.0, 0.55, v.x)) * uP0.y;
   float fine = vnoise(uv * 500.0, vec2(500.0));
   float mottle = fbm01(uv * 5.0, vec2(5.0), 4);
   float scuff = smoothstep(0.66, 0.82, fbm01(uv * 7.0 + 2.0, vec2(7.0), 5));
@@ -377,6 +379,40 @@ void surface(vec2 uv, out vec3 albedo, out float height, out float rough, out fl
   ao = 1.0;
   // Anodized finish behaves mostly like a dark dielectric; bare scratches are metal.
   metal = mix(0.18, 1.0, sat(sc + edgeWear));
+}`;
+
+// Brushed / polished bare metal (chrome fittings, brass casings). uP0.x = base roughness.
+const brushedMetal = /* glsl */ `
+void surface(vec2 uv, out vec3 albedo, out float height, out float rough, out float ao, out float metal) {
+  float brushed = vnoise(vec2(uv.x * 6.0, uv.y * 700.0), vec2(6.0, 700.0)) * 0.6 + vnoise(vec2(uv.x * 24.0, uv.y * 1400.0), vec2(24.0, 1400.0)) * 0.4;
+  float mottle = fbm01(uv * 3.0, vec2(3.0), 4);
+  float smudge = smoothstep(0.55, 0.85, fbm01(uv * 5.0 + 9.0, vec2(5.0), 5));
+  float sc = sat(scratches(uv, 22.0, 0.3, 140.0, 11.0)) * smoothstep(0.5, 0.8, fbm01(uv * 2.0 + 4.0, vec2(2.0), 3));
+  float pit = (1.0 - smoothstep(0.05, 0.2, voronoi(uv * 40.0, vec2(40.0)).x)) * step(0.9, voronoi(uv * 40.0, vec2(40.0)).z);
+  vec3 c = srgb(uC0) * (0.9 + 0.12 * mottle) * (0.96 + 0.08 * brushed);
+  c *= 1.0 - smudge * 0.25 - pit * 0.5;
+  albedo = c;
+  height = 0.5 + brushed * 0.015 - sc * 0.02 - pit * 0.1;
+  rough = clamp(uP0.x + brushed * 0.08 + smudge * 0.22 + sc * 0.1, 0.03, 1.0);
+  ao = 1.0 - pit * 0.4;
+  metal = 1.0 - smudge * 0.3;
+}`;
+
+// Glazed ceramic (toilets, sinks): glossy glaze with fine crazing and grime in the cracks.
+const ceramic = /* glsl */ `
+void surface(vec2 uv, out vec3 albedo, out float height, out float rough, out float ao, out float metal) {
+  vec2 ve = voronoiEdge(uv * 9.0 + fbm(uv * 6.0, vec2(6.0), 3) * 0.15, vec2(9.0));
+  float craze = 1.0 - smoothstep(0.0, 0.012, ve.x);
+  float grime = smoothstep(0.45, 0.85, fbm01(uv * 4.0 + 2.0, vec2(4.0), 5));
+  float fine = vnoise(uv * 300.0, vec2(300.0));
+  vec3 c = srgb(uC0) * (0.95 + 0.05 * fine);
+  c = mix(c, srgb(uC1), grime * 0.45);
+  c *= 1.0 - craze * (0.25 + grime * 0.4);
+  albedo = c;
+  height = 0.6 - craze * 0.15 + fine * 0.01;
+  rough = 0.1 + grime * 0.45 + craze * 0.3;
+  ao = 1.0 - craze * 0.3;
+  metal = 0.0;
 }`;
 
 const fabricCamo = /* glsl */ `
@@ -431,6 +467,23 @@ void surface(vec2 uv, out vec3 albedo, out float height, out float rough, out fl
   height = 0.5 + fine * 0.06;
   rough = 0.86 + fine * 0.08;
   ao = 1.0;
+  metal = 0.0;
+}`;
+
+// Woven cloth tape (team ID strips): light neutral weave, tinted per team by the material color.
+const tape = /* glsl */ `
+void surface(vec2 uv, out vec3 albedo, out float height, out float rough, out float ao, out float metal) {
+  vec2 wv = uv * 160.0;
+  float weave = 0.5 + 0.5 * sin(wv.x * PI) * sin(wv.y * PI);
+  float grime = smoothstep(0.45, 0.9, fbm01(uv * 5.0, vec2(5.0), 4));
+  float scuff = scratches(uv, 9.0, 0.3, 30.0, 5.0);
+  vec3 c = srgb(uC0) * (0.9 + 0.1 * weave);
+  c = mix(c, c * 0.55, grime * 0.5);
+  c = mix(c, c * 0.7, scuff * 0.5);
+  albedo = c;
+  height = 0.5 + weave * 0.08 - scuff * 0.05;
+  rough = 0.82 + weave * 0.06;
+  ao = 0.92 + weave * 0.08;
   metal = 0.0;
 }`;
 
@@ -501,6 +554,10 @@ export const RECIPES: TextureRecipe[] = [
   { id: 'fabricB', tileMeters: 0.6, hero: false, normalStrength: 1.2, colors: [[92, 102, 114], [68, 76, 88], [122, 132, 142], [48, 54, 64]], params: [1, 0, 0, 0], seed: 4, glsl: fabricCamo },
   { id: 'armor', tileMeters: 0.5, hero: false, normalStrength: 1.0, colors: [[78, 82, 74]], glsl: armorPlastic },
   { id: 'rubber', tileMeters: 0.3, hero: false, normalStrength: 1.0, colors: [[24, 24, 25]], glsl: rubber },
+  { id: 'tape', tileMeters: 0.25, hero: false, normalStrength: 1.0, colors: [[205, 203, 196]], glsl: tape },
   { id: 'mattress', tileMeters: 1, hero: false, normalStrength: 1.0, colors: [[190, 184, 166], [70, 90, 120]], glsl: mattress },
   { id: 'leather', tileMeters: 0.25, hero: false, normalStrength: 0.7, colors: [[38, 34, 31]], glsl: leather },
+  { id: 'chrome', tileMeters: 0.5, hero: false, normalStrength: 0.6, colors: [[196, 200, 204]], params: [0.12, 0, 0, 0], glsl: brushedMetal },
+  { id: 'brass', tileMeters: 0.2, hero: false, normalStrength: 0.6, colors: [[204, 160, 84]], params: [0.22, 0, 0, 0], seed: 3, glsl: brushedMetal },
+  { id: 'ceramic', tileMeters: 0.8, hero: false, normalStrength: 0.8, colors: [[232, 228, 218], [140, 128, 98]], glsl: ceramic },
 ];

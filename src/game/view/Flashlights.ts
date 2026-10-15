@@ -5,7 +5,18 @@ import { kelvinColor } from './lighting/lightKinds';
 // Weapon-mounted flashlights. The local player's is a real shadow-casting spotlight with a lens
 // cookie; other players' flashlights are lit by a small pool of spotlights (nearest first) and
 // always show a visible beam and a lens glare, so you can see who is carrying a light.
+// Enemy flashlights render dimmer than your own and your teammates' (light, beam and glare), so
+// they give a carrier away without blinding you.
 // Light objects always exist (intensity 0 when off) so toggling never recompiles shaders.
+
+/** How bright an enemy's flashlight looks to you, relative to a teammate's. */
+export const ENEMY_FLASHLIGHT = { light: 0.4, beam: 0.4, glare: 0.35 };
+/**
+ * Beam half-angle (radians): a tight tactical light that lights what it points at, not the room.
+ * The lens pattern (cookie) keeps nearly all of the light in the hotspot.
+ */
+export const BEAM_ANGLE = 0.15;
+const BEAM_PENUMBRA = 0.3;
 
 const BEAM_VERT = /* glsl */ `
 varying vec3 vLocal;
@@ -38,14 +49,14 @@ function cookieTexture(): THREE.Texture {
   const c = document.createElement('canvas');
   c.width = c.height = S;
   const g = c.getContext('2d')!;
-  // hotspot, a faint reflector ring and soft spill
+  // tight hotspot, a faint reflector ring right around it and almost no spill
   const grad = g.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
   grad.addColorStop(0, 'rgba(255,255,255,1)');
-  grad.addColorStop(0.18, 'rgba(255,255,255,0.95)');
-  grad.addColorStop(0.3, 'rgba(210,210,210,0.55)');
-  grad.addColorStop(0.42, 'rgba(255,255,255,0.62)');
-  grad.addColorStop(0.5, 'rgba(150,150,150,0.3)');
-  grad.addColorStop(0.85, 'rgba(60,60,60,0.12)');
+  grad.addColorStop(0.3, 'rgba(255,255,255,0.92)');
+  grad.addColorStop(0.45, 'rgba(190,190,190,0.42)');
+  grad.addColorStop(0.55, 'rgba(210,210,210,0.3)');
+  grad.addColorStop(0.68, 'rgba(70,70,70,0.06)');
+  grad.addColorStop(0.85, 'rgba(20,20,20,0.015)');
   grad.addColorStop(1, 'rgba(0,0,0,0)');
   g.fillStyle = '#000';
   g.fillRect(0, 0, S, S);
@@ -72,7 +83,7 @@ export class Flashlights {
 
   constructor(opts: { shadowSize: number; shadows: boolean; remoteLights: number }) {
     const cookie = cookieTexture();
-    this.local = new THREE.SpotLight(this.color, 0, 30, 0.34, 0.5, 2);
+    this.local = new THREE.SpotLight(this.color, 0, 30, BEAM_ANGLE, BEAM_PENUMBRA, 2);
     this.local.map = cookie;
     this.local.castShadow = opts.shadows;
     this.local.shadow.mapSize.set(opts.shadowSize, opts.shadowSize);
@@ -82,7 +93,7 @@ export class Flashlights {
     this.local.shadow.camera.far = 30;
     this.group.add(this.local, this.local.target);
     for (let i = 0; i < opts.remoteLights; i++) {
-      const s = new THREE.SpotLight(this.color, 0, 26, 0.34, 0.5, 2);
+      const s = new THREE.SpotLight(this.color, 0, 26, BEAM_ANGLE, BEAM_PENUMBRA, 2);
       s.map = cookie;
       this.remote.push(s);
       this.group.add(s, s.target);
@@ -118,11 +129,13 @@ export class Flashlights {
         blending: THREE.AdditiveBlending,
         side: THREE.DoubleSide,
       });
+      mat.userData.textureExempt = 'light effect: flashlight beam shader';
       const mesh = new THREE.Mesh(cone, mat);
       mesh.visible = false;
       mesh.frustumCulled = false;
       mesh.renderOrder = 5;
       mesh.name = 'fx:flashlightBeam';
+      mesh.userData.shadowExempt = 'light effect: flashlight beam, no surface';
       this.group.add(mesh);
       this.beams.push({ mesh, mat });
       const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: glareTex, color: this.color.clone().multiplyScalar(2.5), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
@@ -148,8 +161,12 @@ export class Flashlights {
     this.local.intensity = 70 * this.localOn;
   }
 
-  /** Remote players' lights, beams and glare (pose gives eye position and aim). */
-  updateRemote(players: { p: PlayerState; eye: THREE.Vector3; yaw: number; pitch: number }[], cam: THREE.Camera): void {
+  /**
+   * Remote players' lights, beams and glare (pose gives eye position and aim). Players not on
+   * `localTeam` get the dimmer enemy look.
+   */
+  updateRemote(players: { p: PlayerState; eye: THREE.Vector3; yaw: number; pitch: number }[], cam: THREE.Camera, localTeam?: 0 | 1): void {
+    const enemy = (r: { p: PlayerState }) => localTeam !== undefined && r.p.team !== localTeam;
     const on = players.filter((r) => r.p.flashlight && r.p.alive);
     on.sort((a, b) => a.eye.distanceToSquared(cam.position) - b.eye.distanceToSquared(cam.position));
     const camDir = new THREE.Vector3(0, 0, -1).applyQuaternion(cam.quaternion);
@@ -164,7 +181,7 @@ export class Flashlights {
       L.position.copy(r.eye).addScaledVector(f, 0.45);
       L.target.position.copy(r.eye).addScaledVector(f, 12);
       L.target.updateMatrixWorld();
-      L.intensity = 60;
+      L.intensity = 60 * (enemy(r) ? ENEMY_FLASHLIGHT.light : 1);
     }
     for (let i = 0; i < this.beams.length; i++) {
       const b = this.beams[i];
@@ -180,16 +197,17 @@ export class Flashlights {
       b.mesh.visible = true;
       b.mesh.position.copy(origin);
       b.mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, -1), f);
-      b.mesh.scale.set(Math.tan(0.3) * 9, Math.tan(0.3) * 9, 9);
-      b.mat.uniforms.uGain.value = 0.16;
+      b.mesh.scale.set(Math.tan(BEAM_ANGLE) * 9, Math.tan(BEAM_ANGLE) * 9, 9);
+      const dim = enemy(r);
+      b.mat.uniforms.uGain.value = 0.16 * (dim ? ENEMY_FLASHLIGHT.beam : 1);
       // lens glare when the beam points at the viewer
       const toCam = cam.position.clone().sub(origin).normalize();
       const facing = Math.max(0, f.dot(toCam));
       g.visible = facing > 0.6 && camDir.dot(toCam) < 0;
       g.position.copy(origin);
-      const s = 0.25 + 0.9 * Math.pow(facing, 6);
+      const s = (0.25 + 0.9 * Math.pow(facing, 6)) * (dim ? 0.7 : 1);
       g.scale.set(s * 1.6, s, 1);
-      g.material.opacity = Math.pow(facing, 4);
+      g.material.opacity = Math.pow(facing, 4) * (dim ? ENEMY_FLASHLIGHT.glare : 1);
     }
   }
 }

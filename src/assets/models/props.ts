@@ -23,8 +23,13 @@ class Sink {
     for (const [m, list] of this.map) {
       if (!list.length) continue;
       const mesh = new THREE.Mesh(merge(list), m);
-      mesh.castShadow = cast && !(m as THREE.MeshStandardMaterial).transparent;
+      const sm = m as THREE.MeshStandardMaterial;
+      const emitter = !!sm.emissive && sm.emissiveIntensity > 1 && sm.color?.getHex() === 0;
+      mesh.castShadow = cast && !sm.transparent && !emitter;
       mesh.receiveShadow = true;
+      if (sm.transparent) mesh.userData.shadowExempt = 'glass: light passes through';
+      else if (emitter) mesh.userData.shadowExempt = 'light emitter: would shadow its own light';
+      else if (!cast) mesh.userData.shadowExempt = `${name}: built without shadows`;
       grp.add(mesh);
     }
     this.map.clear();
@@ -342,7 +347,7 @@ const showerHead: PropDef = {
     s.add('chrome', lathe([[0.0001, 0], [0.04, 0], [0.065, 0.05], [0.0001, 0.055]], 16, { p: [0, -0.02, -0.2], r: [Math.PI * 0.75, 0, 0] }));
     s.add('chrome', cylZ(0.035, 0.04, 12, { p: [0, -0.45, 0.0] }));
     s.add('chrome', torus(0.04, 0.008, 6, 12, Math.PI * 2, { p: [0, -0.45, -0.025] }));
-    return s.build('showerHead', false);
+    return s.build('showerHead');
   },
   colliders: (v) => PROP_COLLIDERS.showerHead(v),
 };
@@ -355,7 +360,7 @@ const drain: PropDef = {
     s.add('black', cyl(0.36, 0.36, 0.031, 32, { p: [0, 0.006, 0] }));
     for (let k = 0; k < 10; k++) s.add('darkMetal', box(0.74, 0.035, 0.035, { p: [0, 0.012, 0], r: [0, (k * Math.PI) / 10, 0] }));
     s.add('darkMetal', torus(0.18, 0.02, 6, 24, Math.PI * 2, { p: [0, 0.014, 0], r: [Math.PI / 2, 0, 0] }));
-    return s.build('drain', false);
+    return s.build('drain');
   },
   colliders: (v) => PROP_COLLIDERS.drain(v),
 };
@@ -614,7 +619,8 @@ export function buildFixture(lib: MaterialLibrary, type: string, color: number, 
     s.add('darkMetal', rbox(0.35, 0.25, 0.15, 0.03, 2, { p: [0, 0, 0] }));
     s.add(lampMat, box(0.3, 0.2, 0.01, { p: [0, 0, -0.08] }));
   }
-  return { group: s.build(`fixture:${type}`, false), emissive };
+  // housings cast (cage wires and shades throw shadows); bulbs and glass are exempt
+  return { group: s.build(`fixture:${type}`, true), emissive };
 }
 
 // -------------------------------------------------------------------------- registry

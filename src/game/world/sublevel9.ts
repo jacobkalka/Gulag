@@ -152,7 +152,7 @@ class Builder {
   }
 
   floor(x0: number, z0: number, x1: number, z1: number, mat: string, surface: Surface = 'concrete', y = 0): void {
-    this.box(x0, y - 0.4, z0, x1, y, z1, mat, { surface, shadow: false });
+    this.box(x0, y - 0.4, z0, x1, y, z1, mat, { surface, walk: true });
   }
 
   ceiling(x0: number, z0: number, x1: number, z1: number, y: number, mat = 'concreteDark', holes: [number, number, number, number][] = []): void {
@@ -418,8 +418,8 @@ export function buildSublevel9(): MapDef {
     b.prop('barrel', -16.6, 0, -6.6, 0, 3);
     b.prop('crate', -4.3, 0, -9.7, 0.0, 4);
     // Corridor lights
-    b.light([-15.0, H.corridor - 0.15, -8.2], WARM, 4.2, 10, 'cage', { priority: 1 });
-    b.light([-7.5, H.corridor - 0.15, -8.2], WARM, 4.0, 10, 'cage', { priority: 1, flicker: b.mirrored ? 0 : 5 });
+    b.light([-15.0, H.corridor - 0.15, -8.2], WARM, 4.7, 10, 'cage', { priority: 1 });
+    b.light([-7.5, H.corridor - 0.15, -8.2], WARM, 4.5, 10, 'cage', { priority: 1, flicker: b.mirrored ? 0 : 5 });
     b.light([-18.5, 2.6, -15.8], 0xff2a12, 3.0, 7, 'emergency', { priority: 0 });
     for (let i = 0; i < 6; i++) b.decal([-16.5 + i * 3, 2.55, CELL.z1 + 0.16], [0, 0, 1], [0.5, 0.35], 'number', { text: `C${String(i + 1).padStart(2, '0')}`, color: '#e8e2d0' });
     b.decal([-12.0, 1.6, CORR.z1 - 0.16], [0, 0, -1], [2.4, 1.0], 'graffiti', { text: 'LOCKDOWN', color: '#e05a1a' });
@@ -471,8 +471,8 @@ export function buildSublevel9(): MapDef {
     b.prop('detector', -19.6, 0, -2.5, Math.PI / 2, 1);
     b.prop('crateSmall', -24.3, 0, 5.2, 0.2, 1);
     b.light([-24.6, H.spawn - 0.3, 0.0], b.mirrored ? 0x3cc8ff : TEAM_A, 1.6, 7, 'emergency', { priority: 1 });
-    b.light([-21.8, H.spawn - 0.15, 2.6], WARM, 3.0, 8, 'cage', { priority: 2 });
-    b.light([-21.8, H.spawn - 0.15, -2.6], WARM, 3.0, 8, 'cage', { priority: 2, flicker: b.mirrored ? 4 : 0 });
+    b.light([-21.8, H.spawn - 0.15, 2.6], WARM, 3.6, 8, 'cage', { priority: 2 });
+    b.light([-21.8, H.spawn - 0.15, -2.6], WARM, 3.6, 8, 'cage', { priority: 2, flicker: b.mirrored ? 4 : 0 });
     b.decal([-24.73, 2.2, 0], [1, 0, 0], [3.2, 1.2], 'sign', { text: b.mirrored ? 'INTAKE B' : 'INTAKE A', color: b.mirrored ? '#3cc8ff' : '#ff6a1a' });
 
     // --- PUMP ROOM
@@ -499,7 +499,7 @@ export function buildSublevel9(): MapDef {
     b.prop('bench', -13.6, 0, 1.6, 0, 2);
     b.prop('bench', -13.6, 0, -1.6, 0, 3);
     b.light([-14.0, H.locker - 0.12, 3.0], COOL, 4.0, 10, 'tube', { priority: 1 });
-    b.light([-14.0, H.locker - 0.12, -3.0], COOL, 3.6, 10, 'tubeBroken', { priority: 1, flicker: 15 });
+    b.light([-14.0, H.locker - 0.12, -3.0], COOL, 3.6, 10, 'tube', { priority: 1, flicker: 15 }); // buzzing, stutters now and then
     b.decal([-9.16, 2.2, 0], [-1, 0, 0], [2.2, 0.9], 'sign', { text: 'LOCKER ROOM', color: '#d8d0b8' });
   });
 

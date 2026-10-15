@@ -153,7 +153,7 @@ export class GameController {
     this.menuMap.lights.settle(new THREE.Vector3(0, 1.7, 0), 0);
     const env = bakeReflectionProbe(this.renderer.gl, scene, new THREE.Vector3(0, 1.7, 0), q.reflectionProbeSize);
     this.assets.materials.setEnvMap(env);
-    scene.environmentIntensity = 0.45;
+    this.menuMap.setEnvMap(env);
     this.menuScene = scene;
     this.menuCam = cam;
     this.renderer.setScenes(scene, cam);

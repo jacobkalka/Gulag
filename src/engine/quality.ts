@@ -31,6 +31,8 @@ export interface QualityPreset {
   reflectionProbeSize: number;
   lightShafts: boolean;
   decalLimit: number;
+  /** Seeded grime/stain/streak decals scattered over the map (one instanced draw). */
+  grimeDecals: number;
 }
 
 export const QUALITY_PRESETS: Record<QualityLevel, QualityPreset> = {
@@ -55,6 +57,7 @@ export const QUALITY_PRESETS: Record<QualityLevel, QualityPreset> = {
     reflectionProbeSize: 128,
     lightShafts: false,
     decalLimit: 64,
+    grimeDecals: 200,
   },
   medium: {
     level: 'medium',
@@ -77,6 +80,7 @@ export const QUALITY_PRESETS: Record<QualityLevel, QualityPreset> = {
     reflectionProbeSize: 256,
     lightShafts: true,
     decalLimit: 128,
+    grimeDecals: 400,
   },
   high: {
     level: 'high',
@@ -99,6 +103,7 @@ export const QUALITY_PRESETS: Record<QualityLevel, QualityPreset> = {
     reflectionProbeSize: 256,
     lightShafts: true,
     decalLimit: 256,
+    grimeDecals: 560,
   },
   ultra: {
     level: 'ultra',
@@ -121,6 +126,7 @@ export const QUALITY_PRESETS: Record<QualityLevel, QualityPreset> = {
     reflectionProbeSize: 512,
     lightShafts: true,
     decalLimit: 400,
+    grimeDecals: 700,
   },
 };
 

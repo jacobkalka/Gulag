@@ -2,16 +2,19 @@ import * as THREE from 'three';
 import type { Brush, DecalDef, MapDef, Ramp } from '@/game/world/mapTypes';
 import type { MaterialLibrary } from '@/assets/materials';
 import { PROPS } from '@/assets/models/props';
-import { decalTexture, radialTexture } from '@/assets/textures/canvasTextures';
+import { decalTexture, heightToNormalTexture, paintNormalTexture, radialTexture } from '@/assets/textures/canvasTextures';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { LightRig } from './lighting/LightRig';
 import { BakedProbes } from './lighting/ProbeBaker';
 import { Atmosphere } from './Atmosphere';
 import type { QualityPreset } from '@/engine/quality';
 import { CollisionWorld } from '@/game/world/collision';
+import { DecalLayer, scatterDecals } from './Decals';
+import { DECAL_CELLS } from '@/assets/textures/decalAtlas';
+import { bindWetMask, buildWetMask, type WetMask, type WetSource } from '@/engine/surfaceFx';
 
 // Builds the renderable map from a MapDef: merged static geometry per material,
-// props, decals, light fixtures (via LightManager) and atmosphere.
+// props, decals, light fixtures (via LightRig), baked probes and atmosphere.
 
 interface Bucket {
   pos: number[];
@@ -128,7 +131,12 @@ export class MapView {
   readonly probes: BakedProbes;
   readonly atmosphere: Atmosphere;
   readonly map: MapDef;
+  decals: DecalLayer | null = null;
   private puddleMat: THREE.MeshStandardMaterial | null = null;
+  private camDir = new THREE.Vector3();
+  readonly wetMask: WetMask;
+  /** Materials created here rather than in the library (decals, puddles, signs). */
+  private ownMats: THREE.MeshStandardMaterial[] = [];
 
   constructor(map: MapDef, lib: MaterialLibrary, quality: QualityPreset, opts: { activeTags?: string[]; world?: CollisionWorld } = {}) {
     this.map = map;
@@ -136,12 +144,12 @@ export class MapView {
     const tags = new Set(opts.activeTags ?? []);
     // Static geometry is merged into per-(material, zone chunk, shadow) batches so the whole
     // map draws in roughly (materials x 9) calls while keeping coarse frustum culling.
-    const batches = new Map<string, { mat: THREE.Material; cast: boolean; geos: THREE.BufferGeometry[] }>();
+    const batches = new Map<string, { mat: THREE.Material; cast: boolean; exempt: string; geos: THREE.BufferGeometry[] }>();
     const chunkOf = (x: number, z: number) => (z < -6 ? 0 : z > 6 ? 2 : 1) * 3 + (x < -9 ? 0 : x > 9 ? 2 : 1);
-    const addGeo = (mat: THREE.Material, cast: boolean, chunk: number, g: THREE.BufferGeometry) => {
-      const key = `${mat.uuid}|${chunk}|${cast ? 1 : 0}`;
+    const addGeo = (mat: THREE.Material, cast: boolean, chunk: number, g: THREE.BufferGeometry, exempt = '') => {
+      const key = `${mat.uuid}|${chunk}|${cast ? 1 : 0}|${exempt}`;
       let b = batches.get(key);
-      if (!b) batches.set(key, (b = { mat, cast, geos: [] }));
+      if (!b) batches.set(key, (b = { mat, cast, exempt, geos: [] }));
       b.geos.push(g);
     };
     // ---- brushes
@@ -151,7 +159,7 @@ export class MapView {
       const buckets = new Map<string, Bucket>();
       brushFaces(br, buckets, br.shadow === false ? 'noshadow' : 'shadow');
       const chunk = chunkOf((br.min[0] + br.max[0]) / 2, (br.min[2] + br.max[2]) / 2);
-      for (const [key, b] of buckets) addGeo(lib.get(key.split('|')[0]), br.shadow !== false, chunk, bucketGeo(b));
+      for (const [key, b] of buckets) addGeo(lib.get(key.split('|')[0]), br.shadow !== false, chunk, bucketGeo(b), br.shadow === false ? 'brush flagged shadow:false (see map data)' : '');
     }
     for (const r of map.ramps) {
       const buckets = new Map<string, Bucket>();
@@ -170,7 +178,7 @@ export class MapView {
         const g = mesh.geometry.clone();
         m4.copy(mesh.matrixWorld);
         g.applyMatrix4(m4);
-        addGeo(mesh.material as THREE.Material, mesh.castShadow, chunk, g);
+        addGeo(mesh.material as THREE.Material, mesh.castShadow, chunk, g, mesh.castShadow ? '' : (mesh.userData.shadowExempt as string) || 'prop part without shadows');
       });
     };
     for (const p of map.props) {
@@ -216,19 +224,41 @@ export class MapView {
       const pm = new THREE.Mesh(mergeGeos(puddles), this.puddleMat);
       pm.renderOrder = 2;
       pm.receiveShadow = true;
+      pm.userData.shadowExempt = 'decal: puddles receive shadows, a flat film never casts';
       this.root.add(pm);
     }
+    // ---- grime, streaks, stains: seeded so every player sees the same wear
+    const world = opts.world ?? CollisionWorld.fromMap(map, [...tags]);
+    const grime = scatterDecals(map, world, hashSeed(map.id), tags, quality.grimeDecals);
+    if (grime.length) {
+      this.decals = new DecalLayer(lib.decalAtlas(), grime);
+      this.ownMats.push(this.decals.mesh.material as THREE.MeshStandardMaterial);
+      this.root.add(this.decals.mesh);
+    }
+    // ---- wet floors: around puddles, under sky openings, below leaks running down walls
+    const wet: WetSource[] = [];
+    for (const d of map.decals) {
+      if (d.kind !== 'puddle') continue;
+      const r = Math.max(d.size[0], d.size[1]) * 0.5;
+      wet.push({ x: d.pos[0], z: d.pos[2], r: r * 1.1, soft: r * 1.4 + 0.6, wet: 1 });
+    }
+    for (const g of grime) {
+      if (g.normal.y > 0.5 || (g.cell !== DECAL_CELLS.leak && g.cell !== DECAL_CELLS.drip)) continue;
+      wet.push({ x: g.pos.x + g.normal.x * 0.35, z: g.pos.z + g.normal.z * 0.35, r: g.w * 0.3, soft: 0.7, wet: 0.85 });
+    }
+    const holes = map.skyHoles.map((h) => ({ min: [h.min[0], h.min[2]] as [number, number], max: [h.max[0], h.max[2]] as [number, number], wet: 0.6, soft: 1.2 }));
+    this.wetMask = buildWetMask(map.bounds, wet, holes, map.wetMaxY ?? 0.6);
     // ---- build batches
     for (const b of batches.values()) {
       const mesh = new THREE.Mesh(mergeGeos(b.geos), b.mat);
       mesh.castShadow = b.cast;
       mesh.receiveShadow = true;
+      if (!b.cast) mesh.userData.shadowExempt = b.exempt || 'static batch without shadows';
       mesh.matrixAutoUpdate = false;
       mesh.name = `static:${b.mat.name}`;
       this.root.add(mesh);
     }
     // baked bounce light from every fixture (and the moon through the roof)
-    const world = opts.world ?? CollisionWorld.fromMap(map, [...tags]);
     this.probes = new BakedProbes(map, world, map.lights, {
       spacing: 1.0,
       bounce: 0.22,
@@ -251,19 +281,25 @@ export class MapView {
     let mat: THREE.Material;
     if (d.kind === 'puddle') {
       if (!this.puddleMat) {
+        const t = puddleTextures();
         this.puddleMat = new THREE.MeshStandardMaterial({
-          color: 0x0b0c0d,
-          roughness: 0.04,
+          name: 'puddle',
+          map: t.map,
+          normalMap: t.normalMap,
+          normalScale: new THREE.Vector2(0.07, 0.07),
+          roughnessMap: t.roughMap,
+          roughness: 1,
           metalness: 0.0,
           transparent: true,
           opacity: 0.88,
-          alphaMap: puddleAlpha(),
+          alphaMap: t.alphaMap,
           depthWrite: false,
           polygonOffset: true,
           polygonOffsetFactor: -2,
           polygonOffsetUnits: -2,
           envMapIntensity: 1.6,
         });
+        this.ownMats.push(this.puddleMat);
       }
       mat = this.puddleMat;
     } else {
@@ -275,7 +311,10 @@ export class MapView {
         h: d.kind === 'number' ? 256 : 256,
       });
       mat = new THREE.MeshStandardMaterial({
+        name: `decal:${d.kind}`,
         map: tex,
+        normalMap: paintNormalTexture(tex.image as HTMLCanvasElement),
+        normalScale: new THREE.Vector2(0.6, 0.6),
         transparent: true,
         depthWrite: false,
         roughness: 0.75,
@@ -285,6 +324,7 @@ export class MapView {
         polygonOffsetUnits: -2,
         envMapIntensity: 0.6,
       });
+      this.ownMats.push(mat as THREE.MeshStandardMaterial);
     }
     void lib;
     const mesh = new THREE.Mesh(geo, mat);
@@ -295,26 +335,56 @@ export class MapView {
     mesh.position.addScaledVector(n, 0.004);
     mesh.receiveShadow = true;
     mesh.renderOrder = 2;
+    mesh.userData.shadowExempt = 'decal: receives shadows, a flat overlay never casts';
     return mesh;
   }
 
+  /** Reflection probe for the decals, puddles and signs built here (library materials get it from the library). */
+  setEnvMap(env: THREE.Texture | null): void {
+    for (const m of this.ownMats) {
+      m.envMap = env;
+      m.needsUpdate = true;
+    }
+  }
+
   update(camera: THREE.Camera, t: number, dt: number): void {
-    this.lights.update(camera.position, t, dt);
+    bindWetMask(this.wetMask);
+    this.lights.update(camera.position, t, dt, camera.getWorldDirection(this.camDir));
     this.atmosphere.update(t);
   }
 }
 
-let _puddle: THREE.Texture | null = null;
-function puddleAlpha(): THREE.Texture {
+interface PuddleTextures {
+  map: THREE.Texture;
+  normalMap: THREE.Texture;
+  roughMap: THREE.Texture;
+  alphaMap: THREE.Texture;
+}
+let _puddle: PuddleTextures | null = null;
+/**
+ * Puddle film: near-black water with silt settling toward the rim, glossy in the middle and
+ * rougher where it thins out, with faint ripples breaking up the reflections.
+ */
+function puddleTextures(): PuddleTextures {
   if (_puddle) return _puddle;
   const S = 256;
-  const c = document.createElement('canvas');
-  c.width = c.height = S;
-  const g = c.getContext('2d')!;
-  const img = g.createImageData(S, S);
+  const mk = () => {
+    const c = document.createElement('canvas');
+    c.width = c.height = S;
+    const g = c.getContext('2d')!;
+    return { c, g, img: g.createImageData(S, S) };
+  };
+  const alpha = mk();
+  const albedo = mk();
+  const rough = mk();
+  const height = new Float32Array(S * S);
   // Irregular blob: radial falloff modulated by low-frequency noise.
   const n = (x: number, y: number) =>
     Math.sin(x * 3.1 + Math.sin(y * 2.3) * 1.7) * 0.5 + Math.sin(y * 4.7 + Math.sin(x * 1.9) * 2.1) * 0.35 + Math.sin((x + y) * 7.3) * 0.15;
+  const waves = Array.from({ length: 13 }, (_, i) => {
+    const a = i * 2.39996 + 0.3;
+    return { dx: Math.cos(a), dy: Math.sin(a), f: 9 + i * 3.1 + (i % 3) * 2.3, ph: i * 1.7 };
+  });
   for (let y = 0; y < S; y++) {
     for (let x = 0; x < S; x++) {
       const u = x / S - 0.5;
@@ -322,13 +392,42 @@ function puddleAlpha(): THREE.Texture {
       const r = Math.hypot(u, v) * 2;
       const a = 1 - smooth(0.45 + n(u * 6, v * 6) * 0.22, 0.95, r);
       const i = (y * S + x) * 4;
-      img.data[i] = img.data[i + 1] = img.data[i + 2] = Math.max(0, Math.min(255, a * 255));
-      img.data[i + 3] = 255;
+      alpha.img.data[i] = alpha.img.data[i + 1] = alpha.img.data[i + 2] = Math.max(0, Math.min(255, a * 255));
+      alpha.img.data[i + 3] = 255;
+      // silt toward the rim (where the film is thin), dark water in the middle
+      const rim = 1 - smooth(0.0, 0.85, a);
+      const grain = 0.85 + 0.15 * Math.sin(x * 1.37 + Math.sin(y * 0.71) * 3) * Math.sin(y * 1.13 - x * 0.29);
+      albedo.img.data[i] = (11 + rim * 30) * grain;
+      albedo.img.data[i + 1] = (12 + rim * 24) * grain;
+      albedo.img.data[i + 2] = (13 + rim * 16) * grain;
+      albedo.img.data[i + 3] = 255;
+      const ro = 0.05 + rim * 0.45;
+      rough.img.data[i] = rough.img.data[i + 1] = rough.img.data[i + 2] = ro * 255;
+      rough.img.data[i + 3] = 255;
+      let h = 0;
+      for (const w of waves) h += Math.sin((u * w.dx + v * w.dy) * w.f + w.ph) / w.f;
+      height[y * S + x] = h * 6 + rim * 0.6;
     }
   }
-  g.putImageData(img, 0, 0);
-  _puddle = new THREE.CanvasTexture(c);
+  const tex = (o: { c: HTMLCanvasElement; g: CanvasRenderingContext2D; img: ImageData }, srgb: boolean) => {
+    o.g.putImageData(o.img, 0, 0);
+    const t = new THREE.CanvasTexture(o.c);
+    t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+    return t;
+  };
+  _puddle = {
+    map: tex(albedo, true),
+    normalMap: heightToNormalTexture(height, S, S, 6),
+    roughMap: tex(rough, false),
+    alphaMap: tex(alpha, false),
+  };
   return _puddle;
+}
+
+function hashSeed(s: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
+  return h >>> 0;
 }
 
 function smooth(e0: number, e1: number, x: number): number {

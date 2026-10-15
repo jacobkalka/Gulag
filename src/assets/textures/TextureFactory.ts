@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { NOISE_GLSL } from './noise.glsl';
 import type { TextureRecipe } from './recipes';
+import { buildDecalAtlas, type DecalAtlas } from './decalAtlas';
 
 export interface TextureSet {
   id: string;
@@ -226,6 +227,13 @@ export class TextureFactory {
     }
   }
 
+  private decals: DecalAtlas | null = null;
+
+  /** Shared PBR decal atlas (grime, streaks, stains...), built on first use. */
+  decalAtlas(): DecalAtlas {
+    return (this.decals ??= buildDecalAtlas(this.gl, this.heroSize >= 1024 ? 2048 : 1024, this.anisotropy));
+  }
+
   get(id: string): TextureSet {
     const s = this.sets.get(id);
     if (!s) throw new Error(`Texture set '${id}' not generated`);
@@ -236,6 +244,8 @@ export class TextureFactory {
     for (const t of this.targets) t.dispose();
     this.targets = [];
     this.sets.clear();
+    this.decals?.dispose();
+    this.decals = null;
     this.quad.geometry.dispose();
   }
 }

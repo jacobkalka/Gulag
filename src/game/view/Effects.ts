@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { LineSegments2 } from 'three/examples/jsm/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/examples/jsm/lines/LineSegmentsGeometry.js';
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
-import { radialTexture } from '@/assets/textures/canvasTextures';
+import { heightToNormalTexture, radialTexture } from '@/assets/textures/canvasTextures';
 import type { Surface } from '@/game/world/mapTypes';
 
 // Pooled VFX: particles (additive sparks + alpha dust/smoke), tracers, muzzle flashes,
@@ -73,6 +73,7 @@ class ParticlePool {
       this.mat.blendSrc = THREE.OneFactor;
       this.mat.blendDst = THREE.OneMinusSrcAlphaFactor;
     }
+    this.mat.userData.textureExempt = 'particles: soft sprites (sparks, dust, smoke)';
     this.points = new THREE.Points(this.geo, this.mat);
     this.points.frustumCulled = false;
     this.points.renderOrder = additive ? 8 : 7;
@@ -163,32 +164,47 @@ interface Flash {
   t: number;
 }
 
-function holeTexture(): THREE.Texture {
+/** Bullet hole: dark bore, chipped raised rim and hairline cracks (albedo + height-derived normal). */
+function holeTextures(): { map: THREE.Texture; normalMap: THREE.Texture } {
   const S = 128;
   const c = document.createElement('canvas');
   c.width = c.height = S;
   const g = c.getContext('2d')!;
-  const grad = g.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
-  grad.addColorStop(0, 'rgba(5,5,5,1)');
-  grad.addColorStop(0.18, 'rgba(12,11,10,0.95)');
-  grad.addColorStop(0.3, 'rgba(40,36,32,0.7)');
-  grad.addColorStop(0.55, 'rgba(70,64,58,0.25)');
-  grad.addColorStop(1, 'rgba(0,0,0,0)');
-  g.fillStyle = grad;
-  g.fillRect(0, 0, S, S);
-  g.strokeStyle = 'rgba(20,18,16,0.6)';
-  g.lineWidth = 1.5;
-  for (let i = 0; i < 7; i++) {
-    const a = Math.random() * Math.PI * 2;
-    const l = S * (0.18 + Math.random() * 0.22);
-    g.beginPath();
-    g.moveTo(S / 2 + Math.cos(a) * S * 0.08, S / 2 + Math.sin(a) * S * 0.08);
-    g.lineTo(S / 2 + Math.cos(a + 0.2) * l, S / 2 + Math.sin(a + 0.2) * l);
-    g.stroke();
+  const img = g.createImageData(S, S);
+  const h = new Float32Array(S * S);
+  const cracks = Array.from({ length: 7 }, (_, i) => ({ a: (i / 7) * Math.PI * 2 + Math.random() * 0.6, l: 0.36 + Math.random() * 0.44 }));
+  for (let y = 0; y < S; y++) {
+    for (let x = 0; x < S; x++) {
+      const u = (x + 0.5) / S - 0.5;
+      const v = (y + 0.5) / S - 0.5;
+      const r = Math.hypot(u, v) * 2;
+      const ang = Math.atan2(v, u);
+      const chip = 0.04 * Math.sin(ang * 9 + 1.3) + 0.03 * Math.sin(ang * 17 + 0.4);
+      // height: bore (0) -> steep wall -> raised spall rim (1) -> settles to the wall surface (0.5)
+      let ht = r < 0.13 + chip ? 0.05 : r < 0.2 + chip ? 0.05 + ((r - 0.13 - chip) / 0.07) * 0.95 : r < 0.5 ? 1 - ((r - 0.2 - chip) / 0.3) * 0.5 : 0.5;
+      let crack = 0;
+      for (const k of cracks) {
+        const d = Math.abs(Math.sin(ang - k.a)) * r;
+        if (r > 0.15 && r < k.l && Math.cos(ang - k.a) > 0) crack = Math.max(crack, 1 - Math.min(1, d / 0.012));
+      }
+      ht -= crack * 0.3;
+      h[y * S + x] = Math.max(0, Math.min(1, ht));
+      // albedo/alpha: near-black bore, scorched dust, cracks fading out
+      const bore = 1 - Math.min(1, Math.max(0, (r - 0.12 - chip) / 0.08));
+      const dust = Math.max(0, 1 - r / 0.55);
+      const a = Math.min(1, Math.max(bore, dust * dust * 0.55, crack * 0.6) * (r < 0.98 ? 1 : 0));
+      const shade = bore > 0.5 ? 6 : 34 + dust * 30;
+      const i = (y * S + x) * 4;
+      img.data[i] = shade;
+      img.data[i + 1] = shade * 0.93;
+      img.data[i + 2] = shade * 0.86;
+      img.data[i + 3] = a * 255;
+    }
   }
+  g.putImageData(img, 0, 0);
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
-  return t;
+  return { map: t, normalMap: heightToNormalTexture(h, S, S, 5) };
 }
 
 export class Effects {
@@ -227,9 +243,12 @@ export class Effects {
     this.tracerGeo.setColors(this.tracerCol);
     this.tracerMat = new LineMaterial({ linewidth: TRACER.widthPx, vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, worldUnits: false });
     this.tracerMat.toneMapped = false;
+    this.tracerMat.userData.textureExempt = 'light effect: tracer line shader';
     this.tracerLines = new LineSegments2(this.tracerGeo, this.tracerMat);
     this.tracerLines.frustumCulled = false;
     this.tracerLines.renderOrder = 9;
+    this.tracerLines.userData.shadowExempt = 'light effect: tracer streaks';
+    this.group.name = 'fx:effects';
     this.group.add(this.tracerLines);
     for (let i = 0; i < TRACER.max; i++) this.tracers.push({ ox: 0, oy: 0, oz: 0, dx: 0, dy: 0, dz: 0, len: 0, t: 0, active: false, gain: 1 });
     this.flashMat = new THREE.SpriteMaterial({
@@ -253,8 +272,11 @@ export class Effects {
     }
     this.holeCount = opts.decalLimit;
     const holeGeo = new THREE.PlaneGeometry(1, 1);
+    const holeTex = holeTextures();
     const holeMat = new THREE.MeshStandardMaterial({
-      map: holeTexture(),
+      name: 'bulletHole',
+      map: holeTex.map,
+      normalMap: holeTex.normalMap,
       transparent: true,
       depthWrite: false,
       roughness: 0.9,
@@ -267,6 +289,7 @@ export class Effects {
     this.holes.frustumCulled = false;
     this.holes.renderOrder = 3;
     this.holes.receiveShadow = true;
+    this.holes.userData.shadowExempt = 'decal: bullet holes receive shadows, never cast';
     this.group.add(this.holes);
   }
 

@@ -15,6 +15,9 @@
     "e2e": "playwright test",
     "shots": "node scripts/screenshot.mjs",
     "balance": "tsx scripts/balance.ts --compare",
+    "audit:shadows": "node scripts/audit.mjs shadows",
+    "audit:textures": "node scripts/audit.mjs textures",
+    "audit:contrast": "node scripts/audit.mjs contrast",
     "test:rules": "npx -y firebase-tools@15.33.0 --config firebase/emulators.test.json emulators:exec --only firestore,database --project demo-lockdown \"vitest run -c vitest.rules.config.ts\"",
     "emulators": "npx -y firebase-tools@15.33.0 emulators:start --only auth,firestore,database --project demo-lockdown"
   },

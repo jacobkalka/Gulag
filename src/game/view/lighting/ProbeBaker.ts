@@ -22,6 +22,13 @@ export interface ProbeBakeOptions {
 }
 
 const SH_BASIS = new Float32Array(9);
+/** SH basis for light arriving from straight below (floor bounce). */
+const DOWN_BASIS = new Float32Array(9);
+/**
+ * Floor-bounce strength relative to the direct bounce lobe: a ceiling sees roughly the floor's
+ * albedo times the floor irradiance (~0.3 E), which `bounce` (0.22) times this reproduces.
+ */
+const FLOOR_BOUNCE = 1.4;
 
 /** Real SH basis (three.js SphericalHarmonics3 order) for a unit direction. */
 function basis(x: number, y: number, z: number, out: Float32Array): void {
@@ -35,6 +42,7 @@ function basis(x: number, y: number, z: number, out: Float32Array): void {
   out[7] = 1.092548 * x * z;
   out[8] = 0.546274 * (x * x - y * y);
 }
+basis(0, -1, 0, DOWN_BASIS);
 
 /** L2 irradiance from SH coefficients (same constants as the three.js shader). */
 export function shIrradiance(c: ArrayLike<number>, o: number, x: number, y: number, z: number, out: THREE.Color): THREE.Color {
@@ -85,6 +93,8 @@ export class BakedProbes {
           const pz = this.min.z + iz * step.z;
           if (world.cylinderBlocked(px, py - 0.02, pz, 0.03, 0.04)) continue;
           valid[idx] = 1;
+          const floorY = world.supportHeight(px, pz, 0.05, py, 0, 12).y;
+          const hasFloor = Number.isFinite(floorY);
           const o = idx * 27;
           for (let li = 0; li < lights.length; li++) {
             const L = lights[li];
@@ -106,6 +116,20 @@ export class BakedProbes {
               sh[o + k * 3] += col.r * SH_BASIS[k];
               sh[o + k * 3 + 1] += col.g * SH_BASIS[k];
               sh[o + k * 3 + 2] += col.b * SH_BASIS[k];
+            }
+            // light the fixture throws on the floor under this probe comes back up from below
+            // (what lights ceilings and the undersides of things in a real room)
+            const fy = hasFloor ? Math.max(0.01, L.pos[1] - floorY) : 0;
+            const fd2 = (L.pos[0] - px) ** 2 + fy * fy + (L.pos[2] - pz) ** 2;
+            const fw = Math.max(0, 1 - Math.pow(Math.sqrt(fd2) / reach, 4));
+            const ef = hasFloor ? ((fw * fw) / Math.max(fd2, 0.35)) * (fy / Math.sqrt(fd2)) * FLOOR_BOUNCE : 0;
+            if (ef > 0 && py > floorY + 0.05) {
+              col.copy(lightCols[li]).multiplyScalar(ef * opts.bounce);
+              for (let k = 0; k < 9; k++) {
+                sh[o + k * 3] += col.r * DOWN_BASIS[k];
+                sh[o + k * 3 + 1] += col.g * DOWN_BASIS[k];
+                sh[o + k * 3 + 2] += col.b * DOWN_BASIS[k];
+              }
             }
           }
           if (moonCol && opts.moon) {

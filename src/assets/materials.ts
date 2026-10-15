@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import type { TextureFactory } from './textures/TextureFactory';
+import type { DecalAtlas } from './textures/decalAtlas';
+import { applySurfaceFx } from '@/engine/surfaceFx';
 import { reticleTexture } from './textures/canvasTextures';
 
 interface MatDef {
@@ -16,7 +18,11 @@ interface MatDef {
   opacity?: number;
   side?: THREE.Side;
   physical?: boolean;
+  /** Documented reason this material has no albedo/normal maps (texture audit). */
+  exempt?: string;
 }
+
+const EMITTER = 'light emitter: HDR emissive surface';
 
 // Every named material used by the map, props, weapons and characters.
 const DEFS: Record<string, MatDef> = {
@@ -41,18 +47,18 @@ const DEFS: Record<string, MatDef> = {
   mattress: { tex: 'mattress', env: 0.3 },
   rubberMat: { tex: 'rubber', env: 0.4 },
   steelPipe: { tex: 'paintGrey', env: 1.0, color: 0xb8bcc0 },
-  ceramic: { color: 0xe8e4da, rough: 0.12, metal: 0, env: 1.2 },
-  chrome: { color: 0xc8ccd0, rough: 0.18, metal: 1, env: 1.3 },
+  ceramic: { tex: 'ceramic', env: 1.2 },
+  chrome: { tex: 'chrome', env: 1.3 },
   darkMetal: { tex: 'gunSteel', color: 0x777777, env: 0.9 },
-  black: { color: 0x0a0a0b, rough: 0.9, metal: 0, env: 0.2 },
+  black: { tex: 'rubber', color: 0x7a7a7a, env: 0.2 },
   // --- Light fixtures (emissive)
-  lampWarm: { color: 0x000000, emissive: 0xffd3a0, emissiveIntensity: 9, rough: 0.4 },
-  lampCool: { color: 0x000000, emissive: 0xd6ecff, emissiveIntensity: 9, rough: 0.4 },
-  lampRed: { color: 0x000000, emissive: 0xff2a12, emissiveIntensity: 7, rough: 0.4 },
-  lampOrange: { color: 0x000000, emissive: 0xff7a1c, emissiveIntensity: 7, rough: 0.4 },
-  lampCyan: { color: 0x000000, emissive: 0x3cc8ff, emissiveIntensity: 7, rough: 0.4 },
-  furnace: { color: 0x000000, emissive: 0xff6a18, emissiveIntensity: 5, rough: 0.6 },
-  glassFixture: { color: 0xeef4ff, rough: 0.05, metal: 0, transparent: true, opacity: 0.35, env: 1.5 },
+  lampWarm: { color: 0x000000, emissive: 0xffd3a0, emissiveIntensity: 9, rough: 0.4, exempt: EMITTER },
+  lampCool: { color: 0x000000, emissive: 0xd6ecff, emissiveIntensity: 9, rough: 0.4, exempt: EMITTER },
+  lampRed: { color: 0x000000, emissive: 0xff2a12, emissiveIntensity: 7, rough: 0.4, exempt: EMITTER },
+  lampOrange: { color: 0x000000, emissive: 0xff7a1c, emissiveIntensity: 7, rough: 0.4, exempt: EMITTER },
+  lampCyan: { color: 0x000000, emissive: 0x3cc8ff, emissiveIntensity: 7, rough: 0.4, exempt: EMITTER },
+  furnace: { color: 0x000000, emissive: 0xff6a18, emissiveIntensity: 5, rough: 0.6, exempt: EMITTER },
+  glassFixture: { color: 0xeef4ff, rough: 0.05, metal: 0, transparent: true, opacity: 0.35, env: 1.5, exempt: 'glass: transparent, shows what is behind it' },
   // --- Guns
   gunSteel: { tex: 'gunSteel', env: 1.15 },
   gunPolymer: { tex: 'gunPolymer', env: 0.9 },
@@ -62,26 +68,32 @@ const DEFS: Record<string, MatDef> = {
   gunAluTan: { tex: 'gunAluTan', env: 1.1 },
   gunWood: { tex: 'gunWood', env: 0.8, rough: 0.8 },
   gunRubber: { tex: 'rubber', env: 0.5 },
-  gunDark: { color: 0x050506, rough: 0.7, metal: 0.2, env: 0.4 },
-  gunBrass: { color: 0xc9a050, rough: 0.28, metal: 1, env: 1.2 },
-  lens: { color: 0x1a2a33, rough: 0.04, metal: 0.3, env: 2.2, physical: true },
-  sightGlass: { color: 0x9fd8c8, rough: 0.02, metal: 0, transparent: true, opacity: 0.16, env: 1.6 },
-  tritium: { color: 0x000000, emissive: 0x6dff8a, emissiveIntensity: 4 },
-  accentOrange: { color: 0x000000, emissive: 0xff6a13, emissiveIntensity: 3, rough: 0.5 },
+  gunDark: { tex: 'gunPolymer', color: 0x4a4a4a, env: 0.4 },
+  gunBrass: { tex: 'brass', env: 1.2 },
+  lens: { color: 0x1a2a33, rough: 0.04, metal: 0.3, env: 2.2, physical: true, exempt: 'coated optic: clear-coat reflections only' },
+  sightGlass: { color: 0x9fd8c8, rough: 0.02, metal: 0, transparent: true, opacity: 0.16, env: 1.6, exempt: 'glass: transparent, shows what is behind it' },
+  tritium: { color: 0x000000, emissive: 0x6dff8a, emissiveIntensity: 4, exempt: EMITTER },
+  accentOrange: { color: 0x000000, emissive: 0xff6a13, emissiveIntensity: 3, rough: 0.5, exempt: EMITTER },
   // --- Characters
   fabricA: { tex: 'fabricA', env: 0.5 },
   fabricB: { tex: 'fabricB', env: 0.5 },
   armor: { tex: 'armor', env: 0.8 },
   leather: { tex: 'leather', env: 0.6 },
-  visor: { color: 0x07090b, rough: 0.08, metal: 0.6, env: 1.8, physical: true },
-  teamA: { color: 0xff6a13, emissive: 0xff5a0a, emissiveIntensity: 2.2, rough: 0.5 },
-  teamB: { color: 0x3cc8ff, emissive: 0x2ab8ff, emissiveIntensity: 2.2, rough: 0.5 },
+  visor: { color: 0x07090b, rough: 0.08, metal: 0.6, env: 1.8, physical: true, exempt: 'coated optic: clear-coat reflections only' },
+  // team ID tape: matte and muted, it only shows where light falls (no glow giving players away in the dark)
+  teamA: { tex: 'tape', color: 0xd27a45, env: 0.3 },
+  teamB: { tex: 'tape', color: 0x5f9cc0, env: 0.3 },
 };
 
 export type MaterialName = keyof typeof DEFS;
 
 /** Global specular reflection strength for library (dielectric) materials. */
 export const ENV_SCALE = 0.5;
+/** Architecture: gets world-space macro variation and map wetness (see engine/surfaceFx). */
+const SURFACE_FX = new Set([
+  'concrete', 'concreteDark', 'floor', 'tileWhite', 'tileGreen', 'tileFloor', 'paintGreen', 'paintGrey', 'paintBlue',
+  'paintOrange', 'rust', 'diamond', 'brick', 'plasterCream', 'plasterGreen', 'wood', 'hazard', 'rubberMat',
+]);
 /** Mostly metallic materials: no diffuse light, so they keep most of their reflections. */
 const METALLIC = new Set(['chrome', 'darkMetal', 'steelPipe', 'diamond', 'gunSteel', 'gunAlu', 'gunAluTan', 'gunBrass', 'rust']);
 
@@ -129,6 +141,8 @@ export class MaterialLibrary {
       ? new THREE.MeshPhysicalMaterial({ ...params, clearcoat: 1, clearcoatRoughness: 0.05 })
       : new THREE.MeshStandardMaterial(params);
     if (this.envMap) mat.envMap = this.envMap;
+    if (def.exempt) mat.userData.textureExempt = def.exempt;
+    if (SURFACE_FX.has(name)) applySurfaceFx(mat);
     this.cache.set(name, mat);
     return mat;
   }
@@ -139,6 +153,11 @@ export class MaterialLibrary {
     if (hit) return hit as THREE.MeshStandardMaterial;
     const m = this.get(name).clone();
     m.color.setHex(color);
+    if (m.userData.surfaceFx) {
+      // clones don't keep onBeforeCompile
+      delete m.userData.surfaceFx;
+      applySurfaceFx(m);
+    }
     this.cache.set(key, m);
     return m;
   }
@@ -155,6 +174,7 @@ export class MaterialLibrary {
         depthWrite: false,
         toneMapped: true,
       });
+      m.userData.textureExempt = 'reticle: emissive projection inside the sight';
       this.reticles.set(key, m);
     }
     return m;
@@ -173,5 +193,10 @@ export class MaterialLibrary {
 
   all(): THREE.Material[] {
     return [...this.cache.values()];
+  }
+
+  /** The shared decal atlas (albedo + normal + roughness/AO for grime, stains and streaks). */
+  decalAtlas(): DecalAtlas {
+    return this.textures.decalAtlas();
   }
 }
