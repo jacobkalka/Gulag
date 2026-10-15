@@ -1,0 +1,13 @@
+{
+  "name": "lockdown-soldier-tools",
+  "private": true,
+  "type": "module",
+  "description": "Offline pipeline that turns the provided Tripo soldier GLBs into rigged game assets. Not part of the game build.",
+  "dependencies": {
+    "@gltf-transform/core": "4.5.1",
+    "@gltf-transform/extensions": "4.5.1",
+    "@gltf-transform/functions": "4.5.1",
+    "meshoptimizer": "1.3.0",
+    "sharp": "0.35.5"
+  }
+}

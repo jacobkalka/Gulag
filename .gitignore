@@ -16,3 +16,7 @@ ui-debug.log*
 .vite/
 coverage/
 firebase/*.log
+
+# soldier pipeline: tool deps and intermediate files
+tools/soldiers/node_modules
+tools/soldiers/work/
