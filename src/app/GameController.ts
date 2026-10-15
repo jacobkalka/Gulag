@@ -22,6 +22,7 @@ import type { BotDifficulty } from '@/game/bots/BotBrain';
 import { RoomController } from './rooms';
 import { buildWeapon, type WeaponModel } from '@/assets/models/weapons';
 import { buildCharacter, poseWithWeapon, type Rig } from '@/assets/models/character';
+import { PerfOverlay } from '@/ui/PerfOverlay';
 
 // Owns the renderer, procedural assets, input and the frame loop. Screens (Preact) call
 // into this to start/leave matches; it reports back through callbacks.
@@ -87,6 +88,8 @@ export class GameController {
     this.renderer.onContextRestored = () => location.reload();
     // ?norender=1: simulate and network without drawing (automated multiplayer tests)
     if (new URLSearchParams(location.search).get('norender') === '1') this.renderer.enabled = false;
+    // ?perf: frame time, draw calls, triangles, shadow lights, memory
+    if (new URLSearchParams(location.search).has('perf')) this.perf = new PerfOverlay();
     this.rooms = new RoomController(this);
   }
 
@@ -411,7 +414,8 @@ export class GameController {
     this.startBackgroundTicker();
     const loop = () => {
       const now = performance.now();
-      const dt = Math.min(0.1, (now - this.last) / 1000);
+      const interval = now - this.last;
+      const dt = Math.min(0.1, interval / 1000);
       this.last = now;
       this.rooms.update();
       if (this.match) {
@@ -425,6 +429,7 @@ export class GameController {
         this.menuMap.update(this.menuCam, this.menuT, dt);
         this.renderer.render(dt);
       }
+      this.perf?.frame(interval, performance.now() - now, this.renderer);
       (window as unknown as { __frames: number }).__frames = ((window as unknown as { __frames: number }).__frames ?? 0) + 1;
       requestAnimationFrame(loop);
     };
@@ -457,6 +462,8 @@ export class GameController {
 
   /** Test hook: stops advancing the match from the render loop (frames are driven by tests). */
   frozen = false;
+  /** `?perf` overlay (null unless requested). */
+  private perf: PerfOverlay | null = null;
 
   /** Test hook: exposes internals for automated tests. */
   debug() {

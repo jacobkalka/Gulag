@@ -85,10 +85,25 @@ npm test             # simulation, bots, netcode over a simulated lossy network
 npm run test:rules   # Firestore + RTDB security rules against the emulators (Java 11+)
 npm run e2e          # two browser tabs play a match over real WebRTC
 npm run build        # static site in dist/
+npm run balance      # time-to-kill table per weapon, range and hit zone
 ```
 
-The architecture, protocol and data model are described in [PLAN.md](PLAN.md). Assets and licenses
-are listed in [CREDITS.md](CREDITS.md).
+Scene audits run the real game in headless Chromium (a dev server is started if none is running):
+
+```bash
+npm run audit:shadows    # every mesh casts and receives shadows, or states why not
+npm run audit:textures   # every lit material has albedo + normal maps, or states why not
+npm run audit:contrast   # luminance histograms from fixed cameras: flat, crushed or blown out fails
+```
+
+Developer views: add `?perf` to the URL for a frame-time, draw-call, triangle, light and memory
+overlay; `#/arttest` renders the map from fixed cameras (`cam=free&pos=x,y,z&look=x,y,z` for any
+view); `#/swatches`, `#/swatches/decals` and `#/swatches/props` show every material, decal and prop
+variant.
+
+The architecture, protocol and data model are described in [PLAN.md](PLAN.md); the upgrade plan and
+its checklist are in [UPGRADE_PLAN.md](UPGRADE_PLAN.md). Assets and licenses are listed in
+[CREDITS.md](CREDITS.md).
 
 ## Known limitations
 

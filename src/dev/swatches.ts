@@ -7,6 +7,7 @@ import { MaterialLibrary } from '@/assets/materials';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { DecalLayer, type DecalInstance } from '@/game/view/Decals';
 import { DECAL_CELLS } from '@/assets/textures/decalAtlas';
+import { PROPS } from '@/assets/models/props';
 
 // Dev page: every procedural material on a sphere + a flat tile under a key light.
 export async function runSwatches(canvas: HTMLCanvasElement): Promise<void> {
@@ -23,12 +24,18 @@ export async function runSwatches(canvas: HTMLCanvasElement): Promise<void> {
   lib.setEnvMap(env);
   if (location.hash.includes('decals')) {
     decalBoard(scene, lib, renderer);
+  } else if (location.hash.includes('props')) {
+    propBoard(scene, lib);
   } else layoutSwatches(scene, lib);
   const key = new THREE.DirectionalLight(0xffffff, 2.2);
   key.position.set(-3, 4, 5);
   scene.add(key);
   const cam = new THREE.PerspectiveCamera(32, 1, 0.1, 100);
   cam.position.set(0, 0.2, 9.5);
+  if (location.hash.includes('props')) {
+    cam.position.set(0, 1.6, 4.2);
+    cam.lookAt(0, -1.7, -2.4);
+  }
   renderer.setScenes(scene, cam);
   renderer.resize();
   (window as any).__stats = { genMs: Math.round(genMs) };
@@ -57,6 +64,28 @@ function decalBoard(scene: THREE.Scene, lib: MaterialLibrary, renderer: Renderer
   const layer = new DecalLayer(lib.decalAtlas(), list);
   scene.add(layer.mesh);
   void renderer;
+}
+
+/** #/swatches/props: every variant of the common props on a concrete floor. */
+function propBoard(scene: THREE.Scene, lib: MaterialLibrary): void {
+  const rows: [string, number[]][] = [
+    ['crate', [0, 1, 2, 3, 4]],
+    ['crateSmall', [0, 1, 2]],
+    ['barrel', [0, 1, 2, 3, 4, 7]],
+    ['bench', [0, 1]],
+  ];
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(12, 9), lib.get('floor'));
+  floor.rotation.x = -Math.PI / 2;
+  floor.position.set(0, -2.2, -1.5);
+  scene.add(floor);
+  rows.forEach(([type, vs], r) => {
+    vs.forEach((v, i) => {
+      const g = PROPS[type].build(lib, v);
+      g.position.set((i - (vs.length - 1) / 2) * 1.5, -2.2, -4 + r * 1.6);
+      g.rotation.y = 0.5;
+      scene.add(g);
+    });
+  });
 }
 
 function layoutSwatches(scene: THREE.Scene, lib: MaterialLibrary): void {

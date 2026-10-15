@@ -131,39 +131,39 @@ Status: ☐ open, ☑ done (verified by running it), ◐ partial (see notes).
 ### Section 1 – Look
 | Item | M | Status |
 |---|---|---|
-| 1A Much darker overall, very low ambient, dim cold moonlight at most | 2 | ☐ |
-| 1A Every visible light source is a real light with falloff, glow, shadows | 2 | ☐ |
-| 1A Pools of light, deep shadows, cones through dust/steam/rain/snow, silhouettes | 2, 6, 7 | ☐ |
-| 1A Flicker, buzz, swinging lights on chains, broken lights, varied color temperature | 2 | ☐ |
-| 1A Readability guardrails (rim light, ambient floor), Brightness/Gamma setting | 2 | ☐ |
-| 1A Weapon flashlight on F, real shadowed spotlight, visible to other players | 2 | ☐ |
-| 1B Every object casts and receives shadows | 2, 5-7 | ☐ |
-| 1B Budgeted shadows: baked AO, pool of nearest shadow lights, fake cones for the rest, tuned bias | 2 | ☐ |
-| 1B `npm run audit:shadows` with allow-list, run on every map | 2, 8 | ☐ |
-| 1C Full PBR sets everywhere (albedo, normal, roughness, AO, metal/emissive, height on key surfaces) | 2 | ☐ |
-| 1C Break up repetition: macro variation, detail blending, vertex grime, decals, edge wear | 2 | ☐ |
-| 1C Wet surfaces look wet; snow looks like snow | 2, 7 | ☐ |
-| 1C `npm run audit:textures`, zero unexplained hits | 2 | ☐ |
+| 1A Much darker overall, very low ambient, dim cold moonlight at most | 2 | ☑ retuned to the user's "happy medium" (M2) |
+| 1A Every visible light source is a real light with falloff, glow, shadows | 2 | ☑ LightRig: real-light pool + baked probes + halos (M2) |
+| 1A Pools of light, deep shadows, cones through dust/steam/rain/snow, silhouettes | 2, 6, 7 | ◐ dust cones on Map 1; rain/snow with Maps 2-3 |
+| 1A Flicker, buzz, swinging lights on chains, broken lights, varied color temperature | 2 | ☑ |
+| 1A Readability guardrails (rim light, ambient floor), Brightness/Gamma setting | 2 | ☑ ambient floor + Brightness; rim light dropped at the user's request (enemies should be hard to see in the dark) |
+| 1A Weapon flashlight on F, real shadowed spotlight, visible to other players | 2 | ☑ narrow 8.6° beam, harsh light on hands/gun, enemy lights 40% as bright |
+| 1B Every object casts and receives shadows | 2, 5-7 | ◐ Map 1 passes `audit:shadows`; Maps 2-3 later |
+| 1B Budgeted shadows: baked AO, pool of nearest shadow lights, fake cones for the rest, tuned bias | 2 | ☑ |
+| 1B `npm run audit:shadows` with allow-list, run on every map | 2, 8 | ◐ passes on Map 1; runs on each new map |
+| 1C Full PBR sets everywhere (albedo, normal, roughness, AO, metal/emissive, height on key surfaces) | 2 | ☑ `audit:textures` passes |
+| 1C Break up repetition: macro variation, detail blending, vertex grime, decals, edge wear | 2 | ◐ macro variation + PBR decal atlas; edge wear open |
+| 1C Wet surfaces look wet; snow looks like snow | 2, 7 | ◐ wet floors done (M2); snow in M7 |
+| 1C `npm run audit:textures`, zero unexplained hits | 2 | ☑ |
 | 1C KTX2/Basis textures, meshopt models, under 400 MB, lazy-load per map | 3, 8 | ☐ |
 | 1D Upgraded models with more detail, damage, wear | 2, 5-7 | ☐ |
-| 1D 3-5 variants of common props | 2 | ☐ |
-| 1D Seeded scatter (same for all players), clear movement lanes, matching collision proxies | 2, 5 | ☐ |
-| 1E ACES, GTAO, high-threshold bloom, grain, vignette, optional CA/MB off in ADS | 1, 2 | ◐ CA/MB/grain/vignette fade in ADS (M1); bloom threshold in M2 |
-| 1E Light shafts, local fog, dust, steam, embers, per-map weather | 2, 6, 7 | ☐ |
-| 1E Low/Medium/High/Ultra scaling of every new effect, 60 FPS Medium target | 2, 8 | ☐ |
-| 1F S-curve contrast, deep but not clipped blacks, high key-to-fill | 2 | ☐ |
-| 1F Per-map grading (LUT or grading pass) with temperature contrast | 2, 6, 7 | ☐ |
-| 1F Eye adaptation, disabled while scoped | 2 | ☐ |
-| 1F Colored bounce/indirect light so shadows aren't plain gray | 2 | ☐ |
-| 1F HDR emissives > 1, selective bloom, halos, tasteful flares, god rays | 2 | ☐ |
-| 1F Colored haze near lights | 2 | ☐ |
-| 1F Small emissive details everywhere | 2, 5-7 | ☐ |
-| 1F Specular highlights/reflections on wet, metal, ice (probes, cheap fallbacks) | 2 | ☐ |
-| 1F Rim light on players and bots | 2, 3 | ☐ |
-| 1F Layered depth, light guiding routes and objectives | 2, 5-7 | ☐ |
-| 1F Clamped glow; glow drops in ADS; HUD always readable | 1, 2 | ◐ bloom drops 70% in ADS (M1); clamp in M2 |
-| 1F Settings: Glow/Bloom, Contrast, Visual Style (Cinematic default) | 2 | ☐ |
-| 1F `npm run audit:contrast` with histograms from fixed cameras on each map | 2, 8 | ☐ |
+| 1D 3-5 variants of common props | 2 | ☑ crate x5, case x3, drum (dented/open), bench x2 |
+| 1D Seeded scatter (same for all players), clear movement lanes, matching collision proxies | 2, 5 | ◐ seeded decals + wall-base clutter (no collision, lanes clear); full scatter with M5 |
+| 1E ACES, GTAO, high-threshold bloom, grain, vignette, optional CA/MB off in ADS | 1, 2 | ☑ |
+| 1E Light shafts, local fog, dust, steam, embers, per-map weather | 2, 6, 7 | ◐ shafts, haze, dust; steam/embers/weather open |
+| 1E Low/Medium/High/Ultra scaling of every new effect, 60 FPS Medium target | 2, 8 | ◐ presets scale every new effect; FPS measured in M8 |
+| 1F S-curve contrast, deep but not clipped blacks, high key-to-fill | 2 | ☑ |
+| 1F Per-map grading (LUT or grading pass) with temperature contrast | 2, 6, 7 | ◐ grading pass live on Map 1; jungle/snow palettes ready |
+| 1F Eye adaptation, disabled while scoped | 2 | ☑ |
+| 1F Colored bounce/indirect light so shadows aren't plain gray | 2 | ☑ baked probes incl. floor bounce |
+| 1F HDR emissives > 1, selective bloom, halos, tasteful flares, god rays | 2 | ◐ no lens flares yet |
+| 1F Colored haze near lights | 2 | ☑ |
+| 1F Small emissive details everywhere | 2, 5-7 | ◐ more with each map |
+| 1F Specular highlights/reflections on wet, metal, ice (probes, cheap fallbacks) | 2 | ☑ reflections fade where little light reaches |
+| 1F Rim light on players and bots | 2, 3 | dropped at the user's request (enemies should be hard to see in the dark) |
+| 1F Layered depth, light guiding routes and objectives | 2, 5-7 | ◐ map reworks M5-7 |
+| 1F Clamped glow; glow drops in ADS; HUD always readable | 1, 2 | ☑ |
+| 1F Settings: Glow/Bloom, Contrast, Visual Style (Cinematic default) | 2 | ☑ |
+| 1F `npm run audit:contrast` with histograms from fixed cameras on each map | 2, 8 | ◐ passes on Map 1 |
 
 ### Section 2 – Maps
 | Item | M | Status |
@@ -237,7 +237,7 @@ Status: ☐ open, ☑ done (verified by running it), ◐ partial (see notes).
 | Touchpad: separate sensitivity and curve | 1 | ☑ |
 | Touchpad: lower visual recoil, larger hit forgiveness | 1 | ☑ |
 | Touchpad: first-launch hint | 1 | ☑ |
-| New settings: Brightness/Gamma, Camera Shake + Reduce Motion, Input Mode, Aim Assist, ADS Toggle/Hold, Flashlight key | 1, 2 | ◐ all present; the flashlight itself arrives in M2 |
+| New settings: Brightness/Gamma, Camera Shake + Reduce Motion, Input Mode, Aim Assist, ADS Toggle/Hold, Flashlight key | 1, 2 | ☑ |
 
 ### Section 7 – Camera feel and damage
 | Item | M | Status |
@@ -261,12 +261,12 @@ Status: ☐ open, ☑ done (verified by running it), ◐ partial (see notes).
 | Host syncs map, skin assignment, scatter seed, weather seed, round state | 3, 8 | ☐ |
 | Multi-tab Playwright per map: join, round, win/lose, XP, back to lobby, party intact | 8 | ☐ |
 | Compact snapshots, only what changed | 8 | ☐ |
-| Instancing, LOD/impostors, culling, shared materials, shadow budget | 2, 6-8 | ☐ |
+| Instancing, LOD/impostors, culling, shared materials, shadow budget | 2, 6-8 | ◐ instanced decals, merged clutter, shadow budget; LOD/impostors with Maps 2-3 |
 | Per-map lazy loading with branded progress bar | 8 | ☐ |
-| `?perf` overlay (FPS, frame time, draw calls, triangles, shadow lights, memory) | 2 | ☐ |
+| `?perf` overlay (FPS, frame time, draw calls, triangles, shadow lights, memory) | 2 | ☑ |
 | `docs/perf.md` per map | 8 | ☐ |
-| Fixed-camera before/after screenshots per map | 0, 2, 5-9 | ◐ before-shots taken |
-| Audits, balance, bot sims, typecheck/lint/unit tests (regen, damage, TTK, input-mode multipliers, team skins) | 1-8 | ◐ balance + regen/damage/TTK/input-mode tests done; team skins in M3 |
+| Fixed-camera before/after screenshots per map | 0, 2, 5-9 | ◐ Map 1 before (M0) and after (M2) |
+| Audits, balance, bot sims, typecheck/lint/unit tests (regen, damage, TTK, input-mode multipliers, team skins) | 1-8 | ◐ 3 audits, balance, scatter/flashlight tests; bot sims + skin tests later |
 | ADS scoped screenshots (sniper and AR) while firing | 1 | ☑ |
 | Touchpad mode end-to-end test | 1 | ☑ |
 
@@ -302,3 +302,24 @@ Status: ☐ open, ☑ done (verified by running it), ◐ partial (see notes).
     hint, mode saved with the account (Firestore rule + test).
   - Verified: 80 unit tests, 22 rules tests, e2e (two-tab WebRTC match, touchpad mode, online
     accounts/party/matchmaking/XP against the emulators), typecheck, lint, production build.
+- **M2** rendering overhaul on Sublevel 9. Screenshots in [`screenshots/upgrade-m2/`](screenshots/upgrade-m2/).
+  - Lighting: every fixture drives a pooled real light (shadowed spots for the nearest/most
+    important, points for the rest, chosen by distance and view direction); flicker, buzz,
+    swinging chains, dead tubes, Kelvin colors; baked L2 light probes with bounce from each
+    light, floor bounce (ceilings no longer black) and moonlight through the roof hole.
+    Retuned to the user's "happy medium" after the first pass came out too dark.
+  - Grading: ACES, S-curve, split toning, per-map palettes, Visual Style / Glow / Contrast
+    settings, eye adaptation frozen while scoped, HDR clamp before bloom.
+  - Surfaces: `audit:textures` passes (every lit material has albedo + normal or a stated
+    reason). 16-cell PBR decal atlas scattered by seed (grime, streaks, stains, cracks, peel,
+    moss, oil, wet) and kept on its face; world-space macro variation; wet floors from a
+    top-down mask (puddles, sky openings, leaks); puddles and bullet holes have normal maps.
+  - Darkness: per the user, no rim light; team strips are matte tape instead of glowing;
+    reflections fade where little light reaches, so nothing glints in a dark corner. The
+    flashlight is a tight 8.6° beam with harsh light on the hands and gun; enemy flashlights
+    render at 40% of a teammate's.
+  - Props: crate x5, small case x3, drum (dented, open with oil), bench x2 on unchanged collision
+    proxies; seeded wall-base clutter (paper, cans, debris, bricks, rebar, trays), no collision.
+  - Tools: `npm run audit:shadows|textures|contrast`, `?perf` overlay, art-test free camera,
+    `#/swatches/decals` and `#/swatches/props` boards, enemy-in-the-dark match shots.
+

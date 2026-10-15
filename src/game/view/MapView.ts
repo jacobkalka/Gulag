@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { Brush, DecalDef, MapDef, Ramp } from '@/game/world/mapTypes';
+import type { Brush, DecalDef, MapDef, PropPlacement, Ramp } from '@/game/world/mapTypes';
 import type { MaterialLibrary } from '@/assets/materials';
 import { PROPS } from '@/assets/models/props';
 import { decalTexture, heightToNormalTexture, paintNormalTexture, radialTexture } from '@/assets/textures/canvasTextures';
@@ -10,6 +10,7 @@ import { Atmosphere } from './Atmosphere';
 import type { QualityPreset } from '@/engine/quality';
 import { CollisionWorld } from '@/game/world/collision';
 import { DecalLayer, scatterDecals } from './Decals';
+import { scatterClutter } from './Clutter';
 import { DECAL_CELLS } from '@/assets/textures/decalAtlas';
 import { bindWetMask, buildWetMask, type WetMask, type WetSource } from '@/engine/surfaceFx';
 
@@ -181,10 +182,9 @@ export class MapView {
         addGeo(mesh.material as THREE.Material, mesh.castShadow, chunk, g, mesh.castShadow ? '' : (mesh.userData.shadowExempt as string) || 'prop part without shadows');
       });
     };
-    for (const p of map.props) {
-      if (p.tag && !tags.has(p.tag)) continue;
+    const placeProp = (p: PropPlacement) => {
       const def = PROPS[p.type];
-      if (!def) continue;
+      if (!def) return;
       const key = `${p.type}:${p.v ?? 0}`;
       let src = def.cacheable ? cache.get(key) : undefined;
       if (!src) {
@@ -198,8 +198,13 @@ export class MapView {
       holder.add(src);
       mergeObject(holder, chunkOf(p.pos[0], p.pos[2]));
       holder.remove(src);
+    };
+    for (const p of map.props) {
+      if (p.tag && !tags.has(p.tag)) continue;
+      placeProp(p);
     }
     for (const g of cache.values()) g.traverse((o) => (o as THREE.Mesh).isMesh && (o as THREE.Mesh).geometry.dispose());
+    cache.clear();
     // ---- lights: steady fixtures merge into the static batches, flickering ones stay separate
     this.lights = new LightRig(lib, map.lights, {
       points: quality.fixtureLights,
@@ -229,6 +234,10 @@ export class MapView {
     }
     // ---- grime, streaks, stains: seeded so every player sees the same wear
     const world = opts.world ?? CollisionWorld.fromMap(map, [...tags]);
+    // ---- loose clutter along the walls (seeded, view only), merged like the props
+    for (const c of scatterClutter(map, world, hashSeed(map.id), tags, quality.clutter)) placeProp(c);
+    for (const g of cache.values()) g.traverse((o) => (o as THREE.Mesh).isMesh && (o as THREE.Mesh).geometry.dispose());
+    cache.clear();
     const grime = scatterDecals(map, world, hashSeed(map.id), tags, quality.grimeDecals);
     if (grime.length) {
       this.decals = new DecalLayer(lib.decalAtlas(), grime);

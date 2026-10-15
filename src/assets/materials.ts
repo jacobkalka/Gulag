@@ -47,6 +47,7 @@ const DEFS: Record<string, MatDef> = {
   mattress: { tex: 'mattress', env: 0.3 },
   rubberMat: { tex: 'rubber', env: 0.4 },
   steelPipe: { tex: 'paintGrey', env: 1.0, color: 0xb8bcc0 },
+  paper: { tex: 'paper', env: 0.2 },
   ceramic: { tex: 'ceramic', env: 1.2 },
   chrome: { tex: 'chrome', env: 1.3 },
   darkMetal: { tex: 'gunSteel', color: 0x777777, env: 0.9 },

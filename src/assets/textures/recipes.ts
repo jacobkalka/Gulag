@@ -470,6 +470,24 @@ void surface(vec2 uv, out vec3 albedo, out float height, out float rough, out fl
   metal = 0.0;
 }`;
 
+// Loose paper (forms, notices): fibers, faint printed lines, a fold crease, tea-colored stains.
+const paper = /* glsl */ `
+void surface(vec2 uv, out vec3 albedo, out float height, out float rough, out float ao, out float metal) {
+  float fib = vnoise(uv * vec2(400.0, 60.0), vec2(400.0, 60.0));
+  float row = fract(uv.y * 24.0);
+  float lines = smoothstep(0.86, 0.93, row) * (1.0 - smoothstep(0.93, 0.97, row)) * step(0.12, fract(uv.x)) * step(fract(uv.x), 0.8) * 0.55;
+  float stain = smoothstep(0.55, 0.9, fbm01(uv * 3.0, vec2(3.0), 4));
+  float crease = 1.0 - smoothstep(0.0, 0.012, abs(fract(uv.x) - 0.5 + fbm(uv * 2.0, vec2(2.0), 2) * 0.02));
+  vec3 c = srgb(uC0) * (0.94 + 0.06 * fib);
+  c = mix(c, c * 0.4, lines);
+  c = mix(c, c * srgbHex(170.0, 140.0, 90.0) * 1.3, stain * 0.5);
+  albedo = c;
+  height = 0.5 + fib * 0.03 - crease * 0.15;
+  rough = 0.9;
+  ao = 1.0 - crease * 0.3;
+  metal = 0.0;
+}`;
+
 // Woven cloth tape (team ID strips): light neutral weave, tinted per team by the material color.
 const tape = /* glsl */ `
 void surface(vec2 uv, out vec3 albedo, out float height, out float rough, out float ao, out float metal) {
@@ -555,6 +573,7 @@ export const RECIPES: TextureRecipe[] = [
   { id: 'armor', tileMeters: 0.5, hero: false, normalStrength: 1.0, colors: [[78, 82, 74]], glsl: armorPlastic },
   { id: 'rubber', tileMeters: 0.3, hero: false, normalStrength: 1.0, colors: [[24, 24, 25]], glsl: rubber },
   { id: 'tape', tileMeters: 0.25, hero: false, normalStrength: 1.0, colors: [[205, 203, 196]], glsl: tape },
+  { id: 'paper', tileMeters: 0.3, hero: false, normalStrength: 1.0, colors: [[214, 210, 196]], glsl: paper },
   { id: 'mattress', tileMeters: 1, hero: false, normalStrength: 1.0, colors: [[190, 184, 166], [70, 90, 120]], glsl: mattress },
   { id: 'leather', tileMeters: 0.25, hero: false, normalStrength: 0.7, colors: [[38, 34, 31]], glsl: leather },
   { id: 'chrome', tileMeters: 0.5, hero: false, normalStrength: 0.6, colors: [[196, 200, 204]], params: [0.12, 0, 0, 0], glsl: brushedMetal },

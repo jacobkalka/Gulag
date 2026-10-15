@@ -139,22 +139,28 @@ export function scatterDecals(map: MapDef, world: CollisionWorld, seed: number, 
   };
   /**
    * Places a wall decal centered near (s, y) on a face, shrunk and shifted so it stays on the
-   * visible part of the face (y0..top). Rotated decals keep a round margin (their art is a blob
-   * inside the cell).
+   * visible part of the face (y0..top) and in front of open space end to end. A rotated decal
+   * keeps the whole cell's inscribed circle clear (its art can reach the cell edge).
    */
   const wallDecal = (f: Face, top: number, cell: DecalCell, s: number, y: number, w: number, h: number, rot: number, opacity: number) => {
     const H = top - f.y0;
     let hw = w / 2;
     let hh = h / 2;
-    if (rot !== 0) hw = hh = Math.max(hw, hh) * 0.8;
+    if (rot !== 0) hw = hh = Math.max(hw, hh);
     hw = Math.min(hw, f.len / 2 - 0.02);
     hh = Math.min(hh, H / 2 - 0.01);
+    if (rot !== 0) hw = hh = Math.min(hw, hh);
     if (hw < 0.15 || hh < 0.12) return;
     const sc = Math.min(Math.max(s, hw + 0.02), f.len - hw - 0.02);
     const yc = Math.min(Math.max(y, f.y0 + hh + 0.01), top - hh - 0.01);
     const [x, z] = f.at(sc);
-    if (!open(x, Math.min(Math.max(yc, f.y0 + 0.3), top - 0.05), z, f.n)) return;
-    const k = rot !== 0 ? (hw * 2) / Math.max(w, h) / 0.8 : 1;
+    const yTest = Math.min(Math.max(yc, f.y0 + 0.3), top - 0.05);
+    if (!open(x, yTest, z, f.n)) return;
+    // both ends too: no running into a perpendicular wall or a prop standing against this one
+    const [xa, za] = f.at(sc - hw + 0.05);
+    const [xb, zb] = f.at(sc + hw - 0.05);
+    if (!open(xa, yTest, za, f.n) || !open(xb, yTest, zb, f.n)) return;
+    const k = rot !== 0 ? (hw * 2) / Math.max(w, h) : 1;
     out.push({
       pos: new THREE.Vector3(x, yc, z).addScaledVector(f.n, 0.006),
       normal: f.n.clone(),

@@ -33,6 +33,8 @@ export interface QualityPreset {
   decalLimit: number;
   /** Seeded grime/stain/streak decals scattered over the map (one instanced draw). */
   grimeDecals: number;
+  /** Seeded loose clutter (paper, cans, debris) merged into the static batches. */
+  clutter: number;
 }
 
 export const QUALITY_PRESETS: Record<QualityLevel, QualityPreset> = {
@@ -58,6 +60,7 @@ export const QUALITY_PRESETS: Record<QualityLevel, QualityPreset> = {
     lightShafts: false,
     decalLimit: 64,
     grimeDecals: 200,
+    clutter: 70,
   },
   medium: {
     level: 'medium',
@@ -81,6 +84,7 @@ export const QUALITY_PRESETS: Record<QualityLevel, QualityPreset> = {
     lightShafts: true,
     decalLimit: 128,
     grimeDecals: 400,
+    clutter: 150,
   },
   high: {
     level: 'high',
@@ -104,6 +108,7 @@ export const QUALITY_PRESETS: Record<QualityLevel, QualityPreset> = {
     lightShafts: true,
     decalLimit: 256,
     grimeDecals: 560,
+    clutter: 230,
   },
   ultra: {
     level: 'ultra',
@@ -127,6 +132,7 @@ export const QUALITY_PRESETS: Record<QualityLevel, QualityPreset> = {
     lightShafts: true,
     decalLimit: 400,
     grimeDecals: 700,
+    clutter: 320,
   },
 };
 

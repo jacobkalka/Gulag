@@ -116,6 +116,38 @@ describe('snapshots', () => {
   });
 });
 
+describe('flashlight', () => {
+  it('toggles once per press and reaches every client through the snapshot', () => {
+    const sim = new GameSim(map, PLAYLISTS['2v2'].rules, 9);
+    for (let i = 0; i < 2; i++) sim.addPlayer({ id: i, team: (i % 2) as 0 | 1, name: `p${i}`, bot: false });
+    sim.start();
+    // player 1 holds the flashlight key for 10 ticks: one toggle, not ten
+    for (let t = 0; t < 30; t++) {
+      sim.step((p) => ({ ...emptyInput(t + 1, p.yaw, 0), buttons: p.id === 1 && t >= 5 && t < 15 ? BTN.FLASHLIGHT : 0 }));
+    }
+    expect(sim.player(1)!.flashlight).toBe(true);
+    expect(sim.player(0)!.flashlight).toBe(false);
+    const decode = (pkt: Uint8Array) => {
+      const r = new ByteReader(pkt);
+      expect(r.u8()).toBe(MSG.SNAPSHOT);
+      return decodeSnapshot(r);
+    };
+    const self = sim.player(0)!;
+    const snap = decode(encodeSnapshot(sim.tick, sim.round, sim.players, sim.grenades, self, self.lastInputSeq));
+    expect(snap.players.find((p) => p.id === 1)!.flashlight).toBe(true);
+    expect(snap.players.find((p) => p.id === 0)!.flashlight).toBe(false);
+    // the owner's own state carries it too (prediction)
+    const own = sim.player(1)!;
+    const snap1 = decode(encodeSnapshot(sim.tick, sim.round, sim.players, sim.grenades, own, own.lastInputSeq));
+    const copy = { ...own, flashlight: false };
+    applySelf(copy, snap1.self!);
+    expect(copy.flashlight).toBe(true);
+    // a second press turns it off
+    for (let t = 30; t < 40; t++) sim.step((p) => ({ ...emptyInput(t + 1, p.yaw, 0), buttons: p.id === 1 && t === 32 ? BTN.FLASHLIGHT : 0 }));
+    expect(sim.player(1)!.flashlight).toBe(false);
+  });
+});
+
 describe('room codes', () => {
   it('generates unambiguous six-character codes', () => {
     for (let i = 0; i < 50; i++) {

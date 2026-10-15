@@ -171,55 +171,139 @@ const holeEdge: PropDef = {
 
 // -------------------------------------------------------------------------- industrial
 
+/** Pushes a lathe/cylinder surface inward around a point (dents in drums and cans). */
+function dent(g: Geo, angle: number, y: number, radius: number, depth: number): Geo {
+  const pos = g.getAttribute('position') as THREE.BufferAttribute;
+  const cx = Math.cos(angle);
+  const cz = Math.sin(angle);
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i);
+    const z = pos.getZ(i);
+    const r = Math.hypot(x, z);
+    if (r < 1e-4) continue;
+    // distance on the surface from the dent center (arc length around + height)
+    const arc = Math.acos(THREE.MathUtils.clamp((x * cx + z * cz) / r, -1, 1)) * r;
+    const d = Math.hypot(arc, pos.getY(i) - y) / radius;
+    if (d >= 1) continue;
+    const k = 1 - depth * (1 - d * d) * (1 - d * d) / r;
+    pos.setXYZ(i, x * k, pos.getY(i), z * k);
+  }
+  pos.needsUpdate = true;
+  g.computeVertexNormals();
+  return g;
+}
+
+// Crates come in five builds with the same 1 m footprint (one collision box for all):
+// 0 braced wood, 1 slatted wood with rope handles, 2 painted military, 3 weathered with the lid
+// knocked askew, 4 steel-cornered plywood case with straps and a hasp.
 const crate: PropDef = {
   cacheable: true,
   build(lib, v) {
     const s = new Sink(lib);
+    const kind = ((v % 5) + 5) % 5;
     const size = 1.0;
-    s.add('wood', rbox(size - 0.04, size - 0.04, size - 0.04, 0.01, 1, { p: [0, size / 2, 0] }));
-    // Frame boards along all 12 edges
-    const t = 0.09;
     const h = size / 2;
+    const t = 0.09;
+    if (kind === 4) {
+      s.add(lib.tinted('wood', 0xc9b08a, 'woodPly'), rbox(size - 0.02, size - 0.02, size - 0.02, 0.015, 2, { p: [0, h, 0] }));
+      for (const sx of [-1, 1]) for (const sy of [0, 1]) for (const sz of [-1, 1]) {
+        s.add('darkMetal', rbox(0.13, 0.13, 0.13, 0.012, 1, { p: [sx * (h - 0.055), sy * (size - 0.11) + 0.055, sz * (h - 0.055)] }));
+      }
+      for (const x of [-0.27, 0.27]) s.add('darkMetal', box(0.05, size + 0.008, size + 0.008, { p: [x, h, 0] }));
+      s.add('darkMetal', box(0.09, 0.13, 0.025, { p: [0, size - 0.12, h + 0.008] }));
+      s.add('darkMetal', torus(0.025, 0.006, 6, 12, Math.PI * 2, { p: [0, size - 0.2, h + 0.022] }));
+      return s.build('crate');
+    }
+    const woodMat = kind === 3 ? lib.tinted('wood', 0xa9a49a, 'woodWeathered') : kind === 1 ? lib.tinted('wood', 0xb89a74, 'woodDark') : lib.get('wood');
+    const frameMat = kind === 2 ? 'paintGreen' : woodMat;
+    const bodyH = kind === 3 ? size - 0.07 : size;
+    s.add(kind === 2 ? 'paintGreen' : woodMat, rbox(size - 0.04, bodyH - 0.04, size - 0.04, 0.01, 1, { p: [0, bodyH / 2, 0] }));
+    // frame boards along the edges (the weathered one has lost its lid frame)
     const frame: Geo[] = [];
     for (const sx of [-1, 1]) {
       for (const sz of [-1, 1]) {
-        frame.push(rbox(t, size, t, 0.01, 1, { p: [sx * (h - t / 2), h, sz * (h - t / 2)] }));
-        frame.push(rbox(size, t, t, 0.01, 1, { p: [0, h + sx * (h - t / 2), sz * (h - t / 2)] }));
-        frame.push(rbox(t, t, size, 0.01, 1, { p: [sx * (h - t / 2), h + sz * (h - t / 2), 0] }));
+        frame.push(rbox(t, bodyH, t, 0.01, 1, { p: [sx * (h - t / 2), bodyH / 2, sz * (h - t / 2)] }));
+        frame.push(rbox(size, t, t, 0.01, 1, { p: [0, t / 2, sz * (h - t / 2)] }));
+        frame.push(rbox(t, t, size, 0.01, 1, { p: [sx * (h - t / 2), t / 2, 0] }));
+        if (kind !== 3) {
+          frame.push(rbox(size, t, t, 0.01, 1, { p: [0, size - t / 2, sz * (h - t / 2)] }));
+          frame.push(rbox(t, t, size, 0.01, 1, { p: [sx * (h - t / 2), size - t / 2, 0] }));
+        }
       }
     }
-    // Diagonal braces on two faces
-    frame.push(rbox(size * 1.25, t * 0.9, 0.03, 0.008, 1, { p: [0, h, h + 0.005], r: [0, 0, Math.PI / 4] }));
-    frame.push(rbox(0.03, t * 0.9, size * 1.25, 0.008, 1, { p: [h + 0.005, h, 0], r: [Math.PI / 4, 0, 0] }));
-    s.add(v % 3 === 2 ? 'paintGreen' : 'wood', ...frame);
+    if (kind === 1) {
+      // horizontal mid slats instead of braces, rope handles on two sides
+      frame.push(rbox(size, t * 0.8, 0.03, 0.008, 1, { p: [0, h, h + 0.005] }));
+      frame.push(rbox(0.03, t * 0.8, size, 0.008, 1, { p: [h + 0.005, h, 0] }));
+      frame.push(rbox(size, t * 0.8, 0.03, 0.008, 1, { p: [0, h, -h - 0.005] }));
+      for (const sx of [-1, 1]) s.add('rubberMat', torus(0.09, 0.012, 6, 16, Math.PI, { p: [sx * (h + 0.012), size * 0.7, 0], r: [0, Math.PI / 2, Math.PI] }));
+    } else {
+      frame.push(rbox(size * 1.25, t * 0.9, 0.03, 0.008, 1, { p: [0, h, h + 0.005], r: [0, 0, Math.PI / 4] }));
+      frame.push(rbox(0.03, t * 0.9, size * 1.25, 0.008, 1, { p: [h + 0.005, h, 0], r: [Math.PI / 4, 0, 0] }));
+    }
+    s.add(frameMat, ...frame);
+    if (kind === 2) {
+      // stamped steel handles and corner plates on the painted crate
+      for (const sz of [-1, 1]) s.add('darkMetal', torus(0.08, 0.01, 6, 14, Math.PI, { p: [0, size * 0.72, sz * (h + 0.012)], r: [0, 0, Math.PI] }));
+      for (const sx of [-1, 1]) for (const sz of [-1, 1]) s.add('darkMetal', box(0.11, 0.11, 0.11, { p: [sx * (h - 0.05), size - 0.05, sz * (h - 0.05)] }));
+    }
+    if (kind === 3) {
+      // lid knocked askew: three loose planks, one split, sliding off one edge
+      const lid: Geo[] = [];
+      for (let i = 0; i < 3; i++) {
+        const len = i === 1 ? size * 0.62 : size * 0.98;
+        lid.push(rbox(len, 0.035, 0.3, 0.008, 1, { p: [0.04 + (i === 1 ? -0.17 : 0), bodyH + 0.018 + i * 0.004, -0.33 + i * 0.33], r: [0, 0.06 - i * 0.025, 0.02 * (i - 1)] }));
+      }
+      s.add(woodMat, ...lid);
+    }
     return s.build('crate');
   },
   colliders: (v) => PROP_COLLIDERS.crate(v),
 };
 
+// Small cases: 0 green ammo can, 1 tan polymer case, 2 grey steel case with a carry handle.
 const crateSmall: PropDef = {
   cacheable: true,
-  build(lib) {
+  build(lib, v) {
     const s = new Sink(lib);
-    s.add('paintGreen', rbox(0.62, 0.42, 0.42, 0.03, 2, { p: [0, 0.21, 0] }));
-    s.add('darkMetal', rbox(0.64, 0.04, 0.44, 0.01, 1, { p: [0, 0.42, 0] }));
-    s.add('darkMetal', box(0.08, 0.05, 0.03, { p: [-0.18, 0.3, -0.215] }));
-    s.add('darkMetal', box(0.08, 0.05, 0.03, { p: [0.18, 0.3, -0.215] }));
+    const kind = ((v % 3) + 3) % 3;
+    const body = kind === 1 ? 'gunPolymerTan' : kind === 2 ? 'paintGrey' : 'paintGreen';
+    s.add(body, rbox(0.62, 0.42, 0.42, kind === 1 ? 0.05 : 0.03, 2, { p: [0, 0.21, 0] }));
+    s.add(kind === 1 ? 'gunPolymer' : 'darkMetal', rbox(0.64, 0.04, 0.44, 0.01, 1, { p: [0, 0.42, 0] }));
+    for (const x of [-0.18, 0.18]) s.add('darkMetal', box(0.08, 0.05, 0.03, { p: [x, 0.3, -0.215] }));
+    if (kind === 2) {
+      s.add('darkMetal', torus(0.07, 0.01, 6, 14, Math.PI, { p: [0, 0.44, 0], r: [0, 0, 0] }));
+      for (const x of [-0.29, 0.29]) s.add('darkMetal', box(0.03, 0.4, 0.44, { p: [x, 0.21, 0] }));
+    }
+    if (kind === 1) for (const z of [-0.12, 0.12]) s.add('gunPolymer', box(0.6, 0.02, 0.03, { p: [0, 0.12, z * 1.85] }));
     return s.build('crateSmall');
   },
   colliders: (v) => PROP_COLLIDERS.crateSmall(v),
 };
 
+// Drums: five paint colors; every third one is dented, every fourth one open with oil inside.
 const barrel: PropDef = {
   cacheable: true,
   build(lib, v) {
     const s = new Sink(lib);
-    const mat = ['paintBlue', 'rust', 'paintOrange', 'paintGreen', 'rust'][v % 5];
+    const mat = ['paintBlue', 'rust', 'paintOrange', 'paintGreen', 'rust'][((v % 5) + 5) % 5];
     const r = 0.29;
-    s.add(mat, lathe([[0.0001, 0], [r - 0.01, 0], [r, 0.02], [r, 0.86], [r - 0.012, 0.88], [0.0001, 0.88]], 28));
+    const open = v % 4 === 3;
+    const shell = lathe(open ? [[r - 0.01, 0], [r, 0.02], [r, 0.86], [r - 0.004, 0.88]] : [[0.0001, 0], [r - 0.01, 0], [r, 0.02], [r, 0.86], [r - 0.012, 0.88], [0.0001, 0.88]], 28);
+    if (v % 3 === 1) {
+      dent(shell, 0.7 + v, 0.45, 0.2, 0.05);
+      dent(shell, 2.9 + v, 0.72, 0.12, 0.025);
+    }
+    s.add(mat, shell);
     for (const y of [0.29, 0.59]) s.add(mat, torus(r + 0.004, 0.012, 6, 28, Math.PI * 2, { p: [0, y, 0], r: [Math.PI / 2, 0, 0] }));
     s.add('darkMetal', torus(r - 0.01, 0.01, 6, 28, Math.PI * 2, { p: [0, 0.875, 0], r: [Math.PI / 2, 0, 0] }));
-    s.add('darkMetal', cyl(0.03, 0.03, 0.02, 10, { p: [0.15, 0.885, 0.05] }));
+    if (open) {
+      // inner wall (reversed profile faces inward) and a dark oil surface below the rim
+      s.add(mat, lathe([[r - 0.006, 0.88], [r - 0.006, 0.7]], 28));
+      s.add('black', cyl(r - 0.008, r - 0.008, 0.01, 28, { p: [0, 0.72, 0] }));
+    } else {
+      s.add('darkMetal', cyl(0.03, 0.03, 0.02, 10, { p: [0.15, 0.885, 0.05] }));
+    }
     return s.build('barrel');
   },
   colliders: (v) => PROP_COLLIDERS.barrel(v),
@@ -452,8 +536,19 @@ const toilet: PropDef = {
 
 const bench: PropDef = {
   cacheable: true,
-  build(lib) {
+  build(lib, v) {
     const s = new Sink(lib);
+    if (v % 2 === 1) {
+      // steel locker-room bench: diamond-plate seat on welded grey legs
+      s.add('diamond', rbox(1.8, 0.04, 0.36, 0.01, 1, { p: [0, 0.44, 0] }));
+      for (const x of [-0.78, 0.78]) {
+        s.add('paintGrey', box(0.05, 0.42, 0.05, { p: [x, 0.21, -0.13] }));
+        s.add('paintGrey', box(0.05, 0.42, 0.05, { p: [x, 0.21, 0.13] }));
+        s.add('paintGrey', box(0.05, 0.05, 0.3, { p: [x, 0.06, 0] }));
+      }
+      s.add('paintGrey', box(1.5, 0.04, 0.04, { p: [0, 0.08, 0] }));
+      return s.build('bench');
+    }
     for (let i = 0; i < 3; i++) s.add('wood', rbox(1.8, 0.035, 0.11, 0.01, 1, { p: [0, 0.44, -0.12 + i * 0.12] }));
     for (const x of [-0.75, 0.75]) {
       s.add('darkMetal', box(0.04, 0.42, 0.04, { p: [x, 0.21, -0.14] }));
@@ -625,7 +720,114 @@ export function buildFixture(lib: MaterialLibrary, type: string, color: number, 
 
 // -------------------------------------------------------------------------- registry
 
+// -------------------------------------------------------------------------- clutter
+// Small loose items scattered along walls (see game/view/Clutter.ts). No collision: they're
+// ankle-high at most, so walking through them never snags.
+
+const noColliders = (): PropCollider[] => [];
+
+const paperClutter: PropDef = {
+  cacheable: true,
+  build(lib, v) {
+    const s = new Sink(lib);
+    const rng = new Rng(4100 + v * 31);
+    const kind = v % 3;
+    if (kind === 2) {
+      // crumpled balls
+      for (let i = 0; i < 2; i++) {
+        const g = rock(0.07, 0.06, 0.07, rng.next() * 1000, 1, 0.1);
+        s.add('paper', xf(g, { p: [rng.range(-0.15, 0.15), 0.03, rng.range(-0.1, 0.1)], r: [rng.next(), rng.next() * 6, rng.next()] }));
+      }
+    } else {
+      for (let i = 0; i <= kind; i++) {
+        s.add('paper', box(0.21, 0.002, 0.297, { p: [rng.range(-0.08, 0.08), 0.001 + i * 0.002, rng.range(-0.06, 0.06)], r: [rng.range(-0.04, 0.04), rng.next() * 6.28, rng.range(-0.04, 0.04)] }));
+      }
+    }
+    return s.build('clutter:paper');
+  },
+  colliders: noColliders,
+};
+
+const canClutter: PropDef = {
+  cacheable: true,
+  build(lib, v) {
+    const s = new Sink(lib);
+    const lying = v % 2 === 1;
+    const g = cyl(0.037, 0.037, 0.11, 14);
+    if (v % 3 !== 0) dent(g, v * 1.3, 0.0, 0.035, 0.012);
+    s.add(v % 4 === 0 ? 'rust' : 'paintGrey', xf(g, lying ? { p: [0, 0.037, 0], r: [Math.PI / 2, 0, v * 0.7] } : { p: [0, 0.055, 0] }));
+    return s.build('clutter:can');
+  },
+  colliders: noColliders,
+};
+
+const chunkClutter: PropDef = {
+  cacheable: true,
+  build(lib, v) {
+    const s = new Sink(lib);
+    const rng = new Rng(5200 + v * 17);
+    const n = 2 + (v % 3);
+    for (let i = 0; i < n; i++) {
+      const sz = rng.range(0.04, 0.11);
+      const g = rock(sz * rng.range(1, 1.6), sz * rng.range(0.5, 0.9), sz, rng.next() * 1000, 0, 0.25);
+      s.add(rng.chance(0.4) ? 'concreteDark' : 'concrete', xf(g, { p: [rng.range(-0.2, 0.2), sz * 0.3, rng.range(-0.12, 0.12)], r: [rng.range(-0.4, 0.4), rng.next() * 6, rng.range(-0.4, 0.4)] }));
+    }
+    return s.build('clutter:chunk');
+  },
+  colliders: noColliders,
+};
+
+const brickClutter: PropDef = {
+  cacheable: true,
+  build(lib, v) {
+    const s = new Sink(lib);
+    const rng = new Rng(6300 + v * 13);
+    const n = 1 + (v % 2);
+    for (let i = 0; i < n; i++) {
+      s.add('brick', rbox(0.21, 0.065, 0.1, 0.006, 1, { p: [rng.range(-0.1, 0.1), 0.0325 + (i === 1 && v % 4 === 3 ? 0.065 : 0), rng.range(-0.08, 0.08)], r: [0, rng.next() * 6, 0] }));
+    }
+    return s.build('clutter:brick');
+  },
+  colliders: noColliders,
+};
+
+const rebarClutter: PropDef = {
+  cacheable: true,
+  build(lib, v) {
+    const s = new Sink(lib);
+    const rng = new Rng(7400 + v * 7);
+    for (let i = 0; i < 2; i++) {
+      const len = rng.range(0.5, 1.1);
+      s.add('rust', cyl(0.007, 0.007, len, 6, { p: [rng.range(-0.1, 0.1), 0.008 + i * 0.012, rng.range(-0.1, 0.1)], r: [Math.PI / 2, rng.next() * 6, rng.range(-0.05, 0.05)] }));
+    }
+    return s.build('clutter:rebar');
+  },
+  colliders: noColliders,
+};
+
+const trayClutter: PropDef = {
+  cacheable: true,
+  build(lib, v) {
+    const s = new Sink(lib);
+    const flipped = v % 2 === 1;
+    s.add('chrome', rbox(0.36, 0.022, 0.26, 0.008, 1, { p: [0, flipped ? 0.011 : 0.011, 0], r: [flipped ? Math.PI : 0, 0, 0] }));
+    if (!flipped) s.add('paintGrey', rbox(0.32, 0.004, 0.22, 0.002, 1, { p: [0, 0.021, 0] }));
+    return s.build('clutter:tray');
+  },
+  colliders: noColliders,
+};
+
+/** Clutter prop types (view only, no collision). */
+export const CLUTTER = ['clutterPaper', 'clutterCan', 'clutterChunk', 'clutterBrick', 'clutterRebar', 'clutterTray'] as const;
+export type ClutterType = (typeof CLUTTER)[number];
+
 export const PROPS: Record<string, PropDef> = {
+  clutterPaper: paperClutter,
+  clutterCan: canClutter,
+  clutterChunk: chunkClutter,
+  clutterBrick: brickClutter,
+  clutterRebar: rebarClutter,
+  clutterTray: trayClutter,
   rubble,
   holeEdge,
   slab,

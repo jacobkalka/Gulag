@@ -283,6 +283,11 @@ export class Renderer {
   /** When false, frames are skipped entirely (automated network tests, hidden tabs). */
   enabled = true;
 
+  /** Scenes currently drawn (world first, then the viewmodel), for the perf overlay. */
+  activeScenes(): THREE.Scene[] {
+    return [this.scene, this.vmScene].filter((s): s is THREE.Scene => !!s);
+  }
+
   render(dt: number): void {
     if (!this.enabled || this.contextLost || !this.composer) return;
     this.gl.info.reset();
