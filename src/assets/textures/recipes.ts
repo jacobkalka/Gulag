@@ -441,6 +441,156 @@ void surface(vec2 uv, out vec3 albedo, out float height, out float rough, out fl
   metal = 0.0;
 }`;
 
+const jungleFloor = /* glsl */ `
+void surface(vec2 uv, out vec3 albedo, out float height, out float rough, out float ao, out float metal) {
+  // dark wet soil under a litter of fallen leaves, moss creeping over it
+  float soilN = fbm01(uv * 6.0, vec2(6.0), 5);
+  vec3 soil = mix(srgb(uC0), srgb(uC0) * 0.6, soilN);
+  // leaves: two layers of rotated voronoi cells, each cell one leaf with its own tone
+  vec3 leafCol = soil;
+  float leafH = 0.0;
+  for (int k = 0; k < 2; k++) {
+    float sc = k == 0 ? 15.0 : 23.0;
+    // warped cells: torn, irregular leaves instead of round spots
+    vec2 q = uv * sc + float(k) * 7.31;
+    q += vec2(fbm(uv * 6.0 + float(k) * 2.1, vec2(6.0), 3), fbm(uv * 6.0 + 4.3 + float(k), vec2(6.0), 3)) * 1.1;
+    vec3 v = voronoi(q, vec2(sc));
+    float shape = 1.0 - smoothstep(0.14, 0.36, v.x * (1.2 + v.z * 0.6));
+    float vein = 1.0 - smoothstep(0.0, 0.03, abs(fract((v.x - v.y) * 3.0) - 0.5) * 0.2);
+    // rotting leaves sit close to the soil's own tone
+    vec3 tone = mix(soil, mix(srgb(uC1), srgb(uC2), fract(v.z * 7.13)), 0.6);
+    tone *= 0.72 + 0.3 * fract(v.z * 3.7);
+    float keep = step(0.35, fract(v.z * 11.3));
+    leafCol = mix(leafCol, tone * (0.92 + 0.12 * vein), shape * keep);
+    leafH = max(leafH, shape * keep * (0.5 + 0.2 * float(k)));
+  }
+  // moss patches and thin twigs
+  float moss = smoothstep(0.55, 0.72, fbm01(uv * 3.0 + 4.0, vec2(3.0), 5));
+  float mossFine = vnoise(uv * 140.0, vec2(140.0));
+  vec3 col = mix(leafCol, srgb(uC3) * (0.8 + 0.4 * mossFine), moss * 0.85);
+  float twig = sat(scratches(uv, 9.0, 0.7, 12.0, 4.0) + scratches(uv, 9.0, 2.1, 10.0, 6.0));
+  col = mix(col, srgbHex(58.0, 44.0, 32.0), twig * 0.8);
+  albedo = col;
+  height = 0.35 + soilN * 0.1 + leafH * 0.4 + moss * 0.18 + twig * 0.15;
+  rough = mix(0.62, 0.8, moss) - leafH * 0.12;
+  ao = 0.8 + 0.2 * leafH;
+  metal = 0.0;
+}`;
+
+const mud = /* glsl */ `
+void surface(vec2 uv, out vec3 albedo, out float height, out float rough, out float ao, out float metal) {
+  vec2 w = uv + vec2(fbm(uv * 4.0, vec2(4.0), 4), fbm(uv * 4.0 + 3.3, vec2(4.0), 4)) * 0.06;
+  float lumps = fbm01(w * 7.0, vec2(7.0), 5);
+  float fine = vnoise(uv * 160.0, vec2(160.0));
+  // boot prints and ruts filled with water
+  vec3 v = voronoi(uv * 6.0, vec2(6.0));
+  float print = (1.0 - smoothstep(0.12, 0.2, v.x)) * step(0.55, v.z);
+  float rut = smoothstep(0.42, 0.5, abs(fract(uv.x * 2.0 + fbm(uv * 2.0, vec2(2.0), 3) * 0.2) - 0.5));
+  float wet = sat(max(print, (1.0 - lumps) * 1.4 - 0.6));
+  vec3 col = mix(srgb(uC0), srgb(uC1), lumps);
+  col *= 0.85 + 0.25 * fine;
+  col = mix(col, col * 0.55, wet);
+  albedo = col;
+  height = 0.4 + lumps * 0.4 - print * 0.25 - rut * 0.1 + fine * 0.04;
+  rough = mix(0.72, 0.12, wet);
+  ao = 0.85 + 0.15 * lumps;
+  metal = 0.0;
+}`;
+
+const bark = /* glsl */ `
+void surface(vec2 uv, out vec3 albedo, out float height, out float rough, out float ao, out float metal) {
+  // deep vertical furrows between rough plates, lichen and moss on top
+  vec2 q = vec2(uv.x * 9.0, uv.y * 2.5);
+  float furrow = fbm01(q + vec2(fbm(uv * vec2(4.0, 1.0), vec2(4.0, 1.0), 3) * 0.8, 0.0), vec2(9.0, 2.5), 5);
+  float ridge = smoothstep(0.35, 0.65, furrow);
+  float plates = voronoi(vec2(uv.x * 12.0, uv.y * 4.0), vec2(12.0, 4.0)).x;
+  float fine = vnoise(uv * vec2(220.0, 90.0), vec2(220.0, 90.0));
+  vec3 col = mix(srgb(uC0) * 0.55, srgb(uC0), ridge);
+  col *= 0.85 + 0.3 * fine;
+  float lichen = smoothstep(0.62, 0.75, fbm01(uv * 5.0 + 2.0, vec2(5.0), 4));
+  float moss = smoothstep(0.55, 0.7, fbm01(uv * 3.0 + 8.0, vec2(3.0), 5));
+  col = mix(col, srgb(uC1), lichen * 0.6);
+  col = mix(col, srgb(uC2) * (0.8 + 0.4 * fine), moss * 0.7);
+  albedo = col;
+  height = 0.3 + ridge * 0.5 + smoothstep(0.1, 0.4, plates) * 0.1 + moss * 0.15 + fine * 0.05;
+  rough = 0.9 - moss * 0.25;
+  ao = 0.6 + 0.4 * ridge;
+  metal = 0.0;
+}`;
+
+const palmBark = /* glsl */ `
+void surface(vec2 uv, out vec3 albedo, out float height, out float rough, out float ao, out float metal) {
+  // rings of old leaf scars up the trunk, fibrous between them
+  float ring = fract(uv.y * 7.0 + fbm(uv * vec2(3.0, 1.0), vec2(3.0, 1.0), 3) * 0.15);
+  float scar = smoothstep(0.0, 0.12, ring) * (1.0 - smoothstep(0.82, 1.0, ring));
+  float fiber = vnoise(vec2(uv.x * 260.0, uv.y * 40.0), vec2(260.0, 40.0));
+  float diamond = abs(fract(uv.x * 6.0 + uv.y * 3.5) - 0.5) + abs(fract(uv.x * 6.0 - uv.y * 3.5) - 0.5);
+  vec3 col = mix(srgb(uC0) * 0.6, srgb(uC0), scar);
+  col *= 0.85 + 0.25 * fiber;
+  col = mix(col, srgb(uC1), smoothstep(0.55, 0.7, fbm01(uv * 4.0, vec2(4.0), 4)) * 0.5);
+  albedo = col;
+  height = 0.4 + scar * 0.35 + fiber * 0.08 + smoothstep(0.6, 0.9, diamond) * 0.1;
+  rough = 0.88;
+  ao = 0.7 + 0.3 * scar;
+  metal = 0.0;
+}`;
+
+const canvas = /* glsl */ `
+void surface(vec2 uv, out vec3 albedo, out float height, out float rough, out float ao, out float metal) {
+  vec2 wv = uv * 180.0;
+  float weave = sin(wv.x * PI) * sin(wv.y * PI);
+  float threadA = 0.5 + 0.5 * sin(wv.x * PI * 2.0);
+  float threadB = 0.5 + 0.5 * sin(wv.y * PI * 2.0);
+  float woven = mix(threadA, threadB, step(0.0, weave));
+  float seam = 1.0 - smoothstep(0.0, 0.006, abs(fract(uv.x * 2.0) - 0.5) - 0.49);
+  float stain = smoothstep(0.55, 0.85, fbm01(uv * 3.0, vec2(3.0), 5));
+  float drip = smoothstep(0.6, 0.85, fbm01(vec2(uv.x * 14.0, uv.y * 1.5), vec2(14.0, 1.5), 4));
+  vec3 col = srgb(uC0) * (0.88 + 0.16 * woven);
+  col = mix(col, col * 0.62, stain * 0.6 + drip * 0.35);
+  col *= 1.0 - seam * 0.25;
+  albedo = col;
+  height = 0.5 + woven * 0.2 + seam * 0.2;
+  rough = 0.86 - drip * 0.25;
+  ao = 0.9 + 0.1 * woven;
+  metal = 0.0;
+}`;
+
+const corrugated = /* glsl */ `
+void surface(vec2 uv, out vec3 albedo, out float height, out float rough, out float ao, out float metal) {
+  // painted corrugated steel (tint the material for the paint color): ribs, scratches, rust streaks
+  float rib = 0.5 + 0.5 * cos(uv.x * PI * 2.0 * 7.0);
+  float fine = vnoise(uv * 200.0, vec2(200.0));
+  float sc = sat(scratches(uv, 16.0, 0.4, 30.0, 3.0) + scratches(uv, 16.0, 1.9, 24.0, 5.0));
+  float streak = smoothstep(0.55, 0.85, fbm01(vec2(uv.x * 24.0, uv.y * 2.0), vec2(24.0, 2.0), 4));
+  float rustPatch = smoothstep(0.6, 0.78, fbm01(uv * 5.0 + 1.0, vec2(5.0), 5));
+  vec3 paint = srgb(uC0) * (0.9 + 0.12 * fine);
+  vec3 rust = srgb(uC1) * (0.7 + 0.5 * fine);
+  vec3 col = mix(paint, rust, sat(streak * 0.55 + rustPatch * 0.8));
+  col = mix(col, srgbHex(140.0, 140.0, 138.0), sc * 0.5);
+  albedo = col;
+  height = 0.5 + rib * 0.4 + fine * 0.03 - sc * 0.04 + rustPatch * 0.04;
+  rough = mix(0.5, 0.9, sat(streak + rustPatch));
+  ao = 0.75 + 0.25 * rib;
+  metal = 0.0;
+}`;
+
+const sandbag = /* glsl */ `
+void surface(vec2 uv, out vec3 albedo, out float height, out float rough, out float ao, out float metal) {
+  // coarse burlap weave, darker where it's wet and caked
+  vec2 wv = uv * 90.0;
+  float tx = 0.5 + 0.5 * sin(wv.x * PI * 2.0 + vnoise(uv * 30.0, vec2(30.0)) * 2.0);
+  float ty = 0.5 + 0.5 * sin(wv.y * PI * 2.0 + vnoise(uv * 30.0 + 3.0, vec2(30.0)) * 2.0);
+  float weave = max(tx * step(0.5, fract(wv.y * 0.5)), ty * step(fract(wv.y * 0.5), 0.5));
+  float dirt = smoothstep(0.45, 0.8, fbm01(uv * 4.0, vec2(4.0), 5));
+  vec3 col = srgb(uC0) * (0.8 + 0.3 * weave);
+  col = mix(col, srgb(uC1), dirt * 0.7);
+  albedo = col;
+  height = 0.45 + weave * 0.35 + dirt * 0.05;
+  rough = 0.9 - dirt * 0.2;
+  ao = 0.8 + 0.2 * weave;
+  metal = 0.0;
+}`;
+
 const armorPlastic = /* glsl */ `
 void surface(vec2 uv, out vec3 albedo, out float height, out float rough, out float ao, out float metal) {
   float fine = vnoise(uv * 300.0, vec2(300.0));
@@ -560,6 +710,8 @@ export const RECIPES: TextureRecipe[] = [
   { id: 'plasterCream', tileMeters: 2.5, hero: false, normalStrength: 1.5, colors: [[196, 186, 160], [120, 116, 108]], glsl: plasterPaint },
   { id: 'plasterGreen', tileMeters: 2.5, hero: false, normalStrength: 1.5, colors: [[58, 86, 72], [120, 116, 108]], seed: 9, glsl: plasterPaint },
   { id: 'wood', tileMeters: 1, hero: false, normalStrength: 2.0, colors: [[150, 112, 72], [96, 66, 40]], params: [0.6, 0, 0, 0], glsl: woodPlanks },
+  // weathered outdoor planks: gray-brown, sun and rain have taken the color out
+  { id: 'deck', tileMeters: 1.2, hero: false, normalStrength: 2.2, colors: [[122, 112, 98], [72, 64, 54]], params: [0.6, 0, 0, 0], seed: 5, glsl: woodPlanks },
   { id: 'hazard', tileMeters: 1, hero: false, normalStrength: 1.2, colors: [[110, 110, 112]], params: [1, 0, 0, 0], glsl: hazard },
   { id: 'gunSteel', tileMeters: 0.25, hero: true, normalStrength: 1.0, colors: [[52, 53, 56]], params: [0.25, 0, 0, 0], glsl: gunSteel },
   { id: 'gunPolymer', tileMeters: 0.15, hero: true, normalStrength: 1.5, colors: [[30, 31, 33]], params: [90, 0.3, 0, 0], glsl: gunPolymer },
@@ -577,6 +729,14 @@ export const RECIPES: TextureRecipe[] = [
   { id: 'paper', tileMeters: 0.3, hero: false, normalStrength: 1.0, colors: [[214, 210, 196]], glsl: paper },
   { id: 'mattress', tileMeters: 1, hero: false, normalStrength: 1.0, colors: [[190, 184, 166], [70, 90, 120]], glsl: mattress },
   { id: 'leather', tileMeters: 0.25, hero: false, normalStrength: 0.7, colors: [[38, 34, 31]], glsl: leather },
+  // outdoor maps
+  { id: 'jungleFloor', tileMeters: 3.0, hero: true, normalStrength: 1.4, colors: [[62, 50, 37], [114, 90, 58], [82, 88, 50], [68, 92, 46]], glsl: jungleFloor },
+  { id: 'mud', tileMeters: 3.0, hero: true, normalStrength: 1.3, colors: [[58, 44, 32], [82, 64, 46]], glsl: mud },
+  { id: 'bark', tileMeters: 1.6, hero: false, normalStrength: 1.6, colors: [[86, 78, 66], [118, 124, 102], [56, 76, 38]], glsl: bark },
+  { id: 'palmBark', tileMeters: 1.2, hero: false, normalStrength: 1.3, colors: [[104, 92, 76], [70, 74, 56]], glsl: palmBark },
+  { id: 'canvas', tileMeters: 1.0, hero: false, normalStrength: 0.9, colors: [[118, 114, 86]], glsl: canvas },
+  { id: 'corrugated', tileMeters: 1.0, hero: false, normalStrength: 1.4, colors: [[205, 205, 200], [118, 64, 36]], glsl: corrugated },
+  { id: 'sandbag', tileMeters: 0.6, hero: false, normalStrength: 1.1, colors: [[150, 132, 98], [78, 64, 46]], glsl: sandbag },
   { id: 'chrome', tileMeters: 0.5, hero: false, normalStrength: 0.6, colors: [[196, 200, 204]], params: [0.12, 0, 0, 0], glsl: brushedMetal },
   { id: 'brass', tileMeters: 0.2, hero: false, normalStrength: 0.6, colors: [[204, 160, 84]], params: [0.22, 0, 0, 0], seed: 3, glsl: brushedMetal },
   { id: 'ceramic', tileMeters: 0.8, hero: false, normalStrength: 0.8, colors: [[232, 228, 218], [140, 128, 98]], glsl: ceramic },

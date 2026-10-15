@@ -138,26 +138,26 @@ Status: ☐ open, ☑ done (verified by running it), ◐ partial (see notes).
 |---|---|---|
 | 1A Much darker overall, very low ambient, dim cold moonlight at most | 2 | ☑ retuned to the user's "happy medium" (M2) |
 | 1A Every visible light source is a real light with falloff, glow, shadows | 2 | ☑ LightRig: real-light pool + baked probes + halos (M2) |
-| 1A Pools of light, deep shadows, cones through dust/steam/rain/snow, silhouettes | 2, 6, 7 | ◐ dust cones on Map 1; rain/snow with Maps 2-3 |
+| 1A Pools of light, deep shadows, cones through dust/steam/rain/snow, silhouettes | 2, 6, 7 | ◐ dust cones on Map 1; rain, mist and tree silhouettes on Map 2; snow dropped with Map 3 (user) |
 | 1A Flicker, buzz, swinging lights on chains, broken lights, varied color temperature | 2 | ☑ |
 | 1A Readability guardrails (rim light, ambient floor), Brightness/Gamma setting | 2 | ☑ ambient floor + Brightness; rim light dropped at the user's request (enemies should be hard to see in the dark) |
 | 1A Weapon flashlight on F, real shadowed spotlight, visible to other players | 2 | ☑ narrow 8.6° beam, harsh light on hands/gun, enemy lights 40% as bright |
-| 1B Every object casts and receives shadows | 2, 5-7 | ◐ Map 1 passes `audit:shadows`; Maps 2-3 later |
+| 1B Every object casts and receives shadows | 2, 5-7 | ☑ both maps pass `audit:shadows` (Map 3 scrapped by the user) |
 | 1B Budgeted shadows: baked AO, pool of nearest shadow lights, fake cones for the rest, tuned bias | 2 | ☑ |
-| 1B `npm run audit:shadows` with allow-list, run on every map | 2, 8 | ◐ passes on Map 1; runs on each new map |
+| 1B `npm run audit:shadows` with allow-list, run on every map | 2, 8 | ☑ passes on both maps |
 | 1C Full PBR sets everywhere (albedo, normal, roughness, AO, metal/emissive, height on key surfaces) | 2 | ☑ `audit:textures` passes |
 | 1C Break up repetition: macro variation, detail blending, vertex grime, decals, edge wear | 2 | ◐ macro variation + PBR decal atlas; edge wear open |
-| 1C Wet surfaces look wet; snow looks like snow | 2, 7 | ◐ wet floors done (M2); snow in M7 |
+| 1C Wet surfaces look wet; snow looks like snow | 2, 7 | ☑ wet floors (M2); Map 2 soaked by rain except under roofs (M6); snow dropped with Map 3 (user) |
 | 1C `npm run audit:textures`, zero unexplained hits | 2 | ☑ |
 | 1C KTX2/Basis textures, meshopt models, under 400 MB, lazy-load per map | 3, 8 | ☐ |
 | 1D Upgraded models with more detail, damage, wear | 2, 5-7 | ☐ |
 | 1D 3-5 variants of common props | 2 | ☑ crate x5, case x3, drum (dented/open), bench x2 |
-| 1D Seeded scatter (same for all players), clear movement lanes, matching collision proxies | 2, 5 | ◐ seeded decals + wall-base clutter (no collision, lanes clear); full scatter with M5 |
+| 1D Seeded scatter (same for all players), clear movement lanes, matching collision proxies | 2, 5 | ☑ seeded decals + wall-base clutter; Map 2's ~1,900 plants are seeded and mirrored, kept off walkways, with trunk colliders and foliage that hides (M6) |
 | 1E ACES, GTAO, high-threshold bloom, grain, vignette, optional CA/MB off in ADS | 1, 2 | ☑ |
-| 1E Light shafts, local fog, dust, steam, embers, per-map weather | 2, 6, 7 | ◐ shafts, haze, dust; steam/embers/weather open |
+| 1E Light shafts, local fog, dust, steam, embers, per-map weather | 2, 6, 7 | ☑ shafts, haze, dust (Map 1); rain, lightning, storm sky, fireflies, per-map fog (Map 2); snow dropped with Map 3 (user) |
 | 1E Low/Medium/High/Ultra scaling of every new effect, 60 FPS Medium target | 2, 8 | ◐ presets scale every new effect; FPS measured in M8 |
 | 1F S-curve contrast, deep but not clipped blacks, high key-to-fill | 2 | ☑ |
-| 1F Per-map grading (LUT or grading pass) with temperature contrast | 2, 6, 7 | ◐ grading pass live on Map 1; jungle/snow palettes ready |
+| 1F Per-map grading (LUT or grading pass) with temperature contrast | 2, 6, 7 | ☑ both maps graded (Monsoon: muted greens, cool shadows, warm lanterns) |
 | 1F Eye adaptation, disabled while scoped | 2 | ☑ |
 | 1F Colored bounce/indirect light so shadows aren't plain gray | 2 | ☑ baked probes incl. floor bounce |
 | 1F HDR emissives > 1, selective bloom, halos, tasteful flares, god rays | 2 | ◐ no lens flares yet |
@@ -168,25 +168,25 @@ Status: ☐ open, ☑ done (verified by running it), ◐ partial (see notes).
 | 1F Layered depth, light guiding routes and objectives | 2, 5-7 | ◐ map reworks M5-7 |
 | 1F Clamped glow; glow drops in ADS; HUD always readable | 1, 2 | ☑ |
 | 1F Settings: Glow/Bloom, Contrast, Visual Style (Cinematic default) | 2 | ☑ |
-| 1F `npm run audit:contrast` with histograms from fixed cameras on each map | 2, 8 | ◐ passes on Map 1 |
+| 1F `npm run audit:contrast` with histograms from fixed cameras on each map | 2, 8 | ◐ passes on Map 1 (9/9); Map 2 has its own night limits, full run still to do (see M6 log) |
 
 ### Section 2 – Maps
 | Item | M | Status |
 |---|---|---|
-| 2A ~2x indoor area, larger outdoor; 1v1 contact in 20-30 s; lanes, loops, flanks | 5-7 | ◐ Map 1: 72x48 m on 3 levels, five routes, bot first contact about 4-5 s |
-| 2A Real elevation and multi-level spaces, mantle-able cover | 5-7 | ◐ Map 1: cistern -2.8 m, catwalks/balconies/gallery +3.2 m, trench, ramps, crates |
-| 2A Distinct zones and landmarks, signage, callouts on spawn | 5-7 | ◐ Map 1: 25 zones, each with its own light; HUD names the zone on spawn and on entry |
+| 2A ~2x indoor area, larger outdoor; 1v1 contact in 20-30 s; lanes, loops, flanks | 5-7 | ◐ Map 1: 72x48 m on 3 levels, five routes; Map 2: 96x72 m outdoor, center/north/south routes; bot first contact about 5 s on both |
+| 2A Real elevation and multi-level spaces, mantle-able cover | 5-7 | ◐ Map 1: cistern -2.8 m, catwalks/balconies/gallery +3.2 m, trench, ramps, crates; Map 2: terrain from the river (-1.3 m) to the ridge (+4 m), stilted command post, stacked containers |
+| 2A Distinct zones and landmarks, signage, callouts on spawn | 5-7 | ◐ Map 1: 25 zones; Map 2: 19 zones, watchtower searchlight and helicopter wreck as landmarks; the HUD names zones on spawn and entry |
 | 2A Cover at three heights, peeks, shortcuts, mixed engagement ranges, fair | 5-7 | ◐ Map 1 (see docs/maps/sublevel9.md) |
-| 2A Overtime capture point at a contested location on each map | 5-7 | ◐ Map 1: cistern floor under the collapse |
-| 2A Spawns for 1v1 to 4v4+, spawn protection, safe distance | 5-7 | ◐ Map 1: 8 per side, 66 m apart |
+| 2A Overtime capture point at a contested location on each map | 5-7 | ◐ Map 1: cistern floor under the collapse; Map 2: the helipad |
+| 2A Spawns for 1v1 to 4v4+, spawn protection, safe distance | 5-7 | ◐ Map 1: 8 per side, 66 m apart; Map 2: 8 per side on the jungle platforms, 85 m apart |
 | 2A Spatial structure for collision and raycasts | 5 | ☑ uniform 2 m grid broadphase (raycasts walk it with DDA); nav for the big map builds in about 0.3 s |
-| 2A Navmesh per map; bots path, use cover, peek, flank, never stuck | 5-7 | ◐ Map 1: multi-level nav grid (see decisions), five routes per round, re-plan after falls, 0 stuck in soak |
-| 2A Headless bot-vs-bot sims per map (stuck spots, unreachable areas, ~50/50 sides) | 5-7 | ◐ `npm run botsim`; Map 1 results in docs/maps/sublevel9-botsim.md |
+| 2A Navmesh per map; bots path, use cover, peek, flank, never stuck | 5-7 | ◐ Map 1: multi-level nav grid (see decisions), five routes per round, re-plan after falls, 0 stuck in soak; Map 2: the same grid on terrain, foliage blocks bots' sight |
+| 2A Headless bot-vs-bot sims per map (stuck spots, unreachable areas, ~50/50 sides) | 5-7 | ◐ `npm run botsim`; results in docs/maps/sublevel9-botsim.md and docs/maps/monsoon-botsim.md (48%/52%) |
 | 2A Map select (leader picks or Random), preview and description, synced via party and matchmaking | 8 | ☐ |
-| 2A `docs/maps/<name>.md` design docs | 5-7 | ◐ docs/maps/sublevel9.md |
+| 2A `docs/maps/<name>.md` design docs | 5-7 | ◐ docs/maps/sublevel9.md, docs/maps/monsoon.md |
 | 2B Map 1: bigger, multi-level bunker, flooded section, catwalks, drainage, boiler room, irregular yet fair | 5 | ☑ |
-| 2C Map 2: tropical jungle base at night in rain (see the user's references: buttress trees with vines, tree ferns, palms, fern carpet, boardwalks) | 6 | ☐ |
-| 2D Map 3: snowy base at night, snow flying, drifts, hangar, radar dome | 7 | ☐ |
+| 2C Map 2: tropical jungle base at night in rain (see the user's references: buttress trees with vines, tree ferns, palms, fern carpet, boardwalks) | 6 | ☑ Monsoon (docs/maps/monsoon.md) |
+| 2D Map 3: snowy base at night, snow flying, drifts, hangar, radar dome | 7 | scrapped by the user ("Scrap map 3 for now") |
 
 ### Section 3 – Soldiers
 | Item | M | Status |
@@ -266,11 +266,11 @@ Status: ☐ open, ☑ done (verified by running it), ◐ partial (see notes).
 | Host syncs map, skin assignment, scatter seed, weather seed, round state | 3, 8 | ☐ |
 | Multi-tab Playwright per map: join, round, win/lose, XP, back to lobby, party intact | 8 | ☐ |
 | Compact snapshots, only what changed | 8 | ☐ |
-| Instancing, LOD/impostors, culling, shared materials, shadow budget | 2, 6-8 | ◐ instanced decals, merged clutter, shadow budget; LOD/impostors with Maps 2-3 |
+| Instancing, LOD/impostors, culling, shared materials, shadow budget | 2, 6-8 | ◐ instanced decals, merged clutter, shadow budget; Map 2 plants as BatchedMeshes with per-plant culling, ground cover culled by distance, trees shadowed by the moon only; LOD/impostors open |
 | Per-map lazy loading with branded progress bar | 8 | ☐ |
 | `?perf` overlay (FPS, frame time, draw calls, triangles, shadow lights, memory) | 2 | ☑ |
 | `docs/perf.md` per map | 8 | ☐ |
-| Fixed-camera before/after screenshots per map | 0, 2, 5-9 | ◐ Map 1 before (M0) and after (M2) |
+| Fixed-camera before/after screenshots per map | 0, 2, 5-9 | ◐ Map 1 before (M0) and after (M2, M5); Map 2 fixed cameras (M6) |
 | Audits, balance, bot sims, typecheck/lint/unit tests (regen, damage, TTK, input-mode multipliers, team skins) | 1-8 | ◐ 3 audits, balance, scatter/flashlight tests; bot sims + skin tests later |
 | ADS scoped screenshots (sniper and AR) while firing | 1 | ☑ |
 | Touchpad mode end-to-end test | 1 | ☑ |
@@ -386,3 +386,68 @@ Status: ☐ open, ☑ done (verified by running it), ◐ partial (see notes).
   - Verified: lint, typecheck, 133 unit tests, the bot soak and `npm run botsim` pass;
     `audit:shadows`, `audit:textures` and `audit:contrast` (9/9 cameras) pass; e2e two-tab
     networked round and touchpad mode pass on the new map.
+- **M6** Map 2, Monsoon: a jungle outpost at night in a tropical downpour, after the user's
+  references. Design doc [`docs/maps/monsoon.md`](docs/maps/monsoon.md) (with a top-down layout);
+  screenshots in [`screenshots/upgrade-m6/`](screenshots/upgrade-m6/).
+  - The map: 96 m x 72 m, mirrored. Each team spawns on a boardwalk platform in its jungle. The
+    walled base between them holds containers, tents, barracks, motor pools, a command post on
+    stilts and the helipad with a wrecked helicopter (the overtime objective). A swamp with
+    boardwalks and a ridge with an MG nest and a watchtower lie to the north, the river with a
+    bridge and a pump house to the south.
+  - Plants: about 1,900 placed by a seeded, mirrored scatter: buttress giants with lianas and
+    crowns, palms, tree ferns, bananas, monstera, bushes, grass and a fern carpet. A band of jungle
+    beyond the walls means no view ends at an open horizon. Procedural leaf atlas, wind sway.
+  - Engine:
+    - terrain heightfields in collision (exact ray tests, support, bullets) and in the nav grid;
+    - plant colliders: trunks block, foliage hides players from people and bots without
+      stopping bullets (bots' `canSee` treats it as concealment);
+    - outdoor props: containers, tents, sandbag walls, razor wire, a jeep, a truck and the wreck;
+    - outdoor materials: jungle floor, mud, bark, palm bark, canvas, corrugated metal,
+      sandbags, weathered deck planks.
+  - Look:
+    - storm sky with drifting clouds, lightning flashes that light the scene;
+    - rain streaks that stop under roofs, everything wet except under cover (the wet mask now
+      stores roof heights);
+    - mud paths blended over the ground, fireflies, per-map fog and grade;
+    - the moon lights only the cleared base. Under the canopy the overcast sky and moon are baked
+      into the light probes, dimmed by the tree crowns overhead. The sky projects as a whole
+      hemisphere, so trunks and walls get light too.
+    - a `foliage` setting per quality preset thins the ground cover.
+  - Problems found from screenshots and fixed:
+    - the jungle rendered nearly black: the sky light reached the probes as a single straight-down
+      ray, so vertical surfaces got about 12% of it, and the canopy blocked too much;
+    - giant trunks read as black chimneys until they got leafy crowns;
+    - saturated orange wood and neon greens: weathered gray deck planks, muted leaf colors and
+      leaf litter, softer team lanterns;
+    - floodlight halos too big; a jeep headlight halo floated in the air;
+    - cameras inside a tent, beside a container and above a banana plant were reframed;
+    - the swamp and the jungle trails got lanterns on posts, and a fire in a drum burns by the
+      river.
+  - Performance (medium, from the spawn):
+    - plants were about 630 instanced draw calls a pass; as four BatchedMeshes they are one call
+      per material per pass, culled per plant;
+    - ground cover isn't drawn beyond 34 m, and only the moon draws tree shadows (floodlights
+      skip them);
+    - sandbags were 374k of the 519k static triangles: lightened about 4x;
+    - the moon's shadow map now renders once on Low and Medium, as the presets always said
+      (`sunShadowDynamic` was never wired up); players cast moon shadows on High and Ultra;
+    - result: from 2.3 M to about 1.0 M triangles and from 650 to about 390 draw calls. A per-map
+      breakdown goes in `docs/perf.md` in M8.
+  - Bots: the nav grid builds in about 0.3 s (25,600 nodes).
+    - over 89 rounds, sides split 48%/52%, first contact about 5 s, most fights in the base;
+    - one bot kept trying to reach cover under the bridge, where there is no standing room:
+      the gap under the deck is now closed;
+    - a point of interest sat on top of a crate and was moved;
+    - palms and bananas at the spawn platforms' edge blocked the way out: big plants now keep
+      out of an 8 m clearing around each spawn.
+    - Results: [`docs/maps/monsoon-botsim.md`](docs/maps/monsoon-botsim.md).
+  - Contrast audit: the night jungle can't meet the bunker's limits without losing the dark
+    look the user asked for, so Monsoon has its own limits in the art test (up to 50%
+    near-black, range ≥ 0.15). In a match the flashlight carries the jungle; match screenshots
+    there pass the default limits. The full Monsoon audit run was cut short this milestone; it
+    is rerun in M8.
+  - Verified: lint, typecheck, 146 unit tests (new: roof heights in the wet mask, Monsoon spawns,
+    plant mirroring, canopy shading); `audit:shadows` and `audit:textures` pass on Monsoon; an
+    offline 4v4 practice match on Monsoon plays rounds with bots and no errors.
+- **M7** Map 3 (snow base): skipped at the user's request ("Scrap map 3 for now ... skip the
+  production of map 3 and go on to the next steps and finish").

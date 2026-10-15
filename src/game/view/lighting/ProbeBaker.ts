@@ -19,7 +19,16 @@ export interface ProbeBakeOptions {
   floor: [number, number, number];
   /** Moonlight through sky openings (irradiance on a surface facing the moon). */
   moon?: { color: number; irradiance: number };
+  /** Light from an overcast sky overhead (irradiance on an upward-facing surface in the open). */
+  sky?: { color: number; irradiance: number };
+  /** How much light gets through soft cover (tree crowns) from a probe toward a sky direction, 0..1. */
+  shade?: (x: number, y: number, z: number, dir: THREE.Vector3) => number;
 }
+
+const UP = new THREE.Vector3(0, 1, 0);
+/** SH of a uniform upper hemisphere per unit of up-facing irradiance: Y00 * 2, Y1(y) * 1. */
+const SKY_C0 = 0.282095 * 2;
+const SKY_C1 = 0.488603;
 
 const SH_BASIS = new Float32Array(9);
 /** SH basis for light arriving from straight below (floor bounce). */
@@ -85,6 +94,7 @@ export class BakedProbes {
     const col = new THREE.Color();
     const moonDir = new THREE.Vector3(...map.moonDir).normalize().negate(); // toward the moon
     const moonCol = opts.moon ? new THREE.Color(opts.moon.color) : null;
+    const skyCol = opts.sky ? new THREE.Color(opts.sky.color) : null;
     const lightCols = lights.map((l) => lightRadiance(l, new THREE.Color()));
     for (let iz = 0; iz < nz; iz++) {
       for (let iy = 0; iy < ny; iy++) {
@@ -137,13 +147,26 @@ export class BakedProbes {
           if (moonCol && opts.moon) {
             // sky visible along the moon direction?
             if (world.raycast(px, py, pz, moonDir.x, moonDir.y, moonDir.z, 60) === null) {
+              const through = opts.shade ? opts.shade(px, py, pz, moonDir) : 1;
               basis(moonDir.x, moonDir.y, moonDir.z, SH_BASIS);
-              col.copy(moonCol).multiplyScalar(opts.moon.irradiance * opts.bounce);
+              col.copy(moonCol).multiplyScalar(opts.moon.irradiance * opts.bounce * through);
               for (let k = 0; k < 9; k++) {
                 sh[o + k * 3] += col.r * SH_BASIS[k];
                 sh[o + k * 3 + 1] += col.g * SH_BASIS[k];
                 sh[o + k * 3 + 2] += col.b * SH_BASIS[k];
               }
+            }
+          }
+          if (skyCol && opts.sky && world.raycast(px, py, pz, 0, 1, 0, 40) === null) {
+            // open sky overhead, dimmed under the canopy: a uniformly bright upper hemisphere
+            // projects onto the constant and the vertical terms only (E up = irradiance,
+            // E sideways = half of it, E down = 0)
+            const through = opts.shade ? opts.shade(px, py, pz, UP) : 1;
+            col.copy(skyCol).multiplyScalar(opts.sky.irradiance * through);
+            for (let ch = 0; ch < 3; ch++) {
+              const e = ch === 0 ? col.r : ch === 1 ? col.g : col.b;
+              sh[o + ch] += e * SKY_C0;
+              sh[o + 3 + ch] += e * SKY_C1;
             }
           }
           // ambient floor: constant term only (the shader's irradiance from c0 is c0 * 0.886227)

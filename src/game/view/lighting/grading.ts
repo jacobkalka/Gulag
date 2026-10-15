@@ -16,8 +16,8 @@ export interface MapPalette {
 export const PALETTES: Record<string, MapPalette> = {
   // bunker: sickly green fluorescents, warm tungsten pools, red emergency accents, cold blue-gray shadows
   sublevel9: { exposure: 2.3, saturation: 0.95, shadowTint: [0.94, 0.98, 1.05], highlightTint: [1.04, 1.0, 0.95], key: 0.07 },
-  // tropical night: deep teal/green with amber lantern glow
-  jungle: { exposure: 1.7, saturation: 1.12, shadowTint: [0.82, 1.02, 1.04], highlightTint: [1.1, 0.98, 0.82], key: 0.05 },
+  // tropical storm night: cool green-gray shadows, amber lanterns, cold floodlights; muted greens
+  monsoon: { exposure: 2.45, saturation: 0.92, shadowTint: [0.93, 1.0, 1.03], highlightTint: [1.05, 1.0, 0.94], key: 0.06 },
   // snow night: icy blue shadows, hot orange windows
   snow: { exposure: 1.6, saturation: 1.06, shadowTint: [0.86, 0.95, 1.14], highlightTint: [1.12, 0.98, 0.84], key: 0.06 },
   neutral: { exposure: 1, saturation: 1, shadowTint: [1, 1, 1], highlightTint: [1, 1, 1], key: 0.12 },

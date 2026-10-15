@@ -1,6 +1,8 @@
 // Data model for arena maps. Pure data: used by the simulation (collision, spawns,
 // objective, nav) and by the client view (meshes, lights, decals).
 
+import type { TerrainDef } from './terrain';
+
 export type V3 = [number, number, number];
 
 /** Physical surface, drives impact VFX/decals and footstep sounds. */
@@ -130,6 +132,26 @@ export interface WaterVolume {
   max: V3;
 }
 
+/** Plants for outdoor maps (instanced, swaying in the wind). */
+export type PlantKind = 'fern' | 'treeFern' | 'palm' | 'banana' | 'monstera' | 'bush' | 'grass' | 'buttress';
+
+export interface PlantPlacement {
+  kind: PlantKind;
+  pos: V3;
+  rot: number;
+  scale: number;
+  /** Variant index (each kind has a few shapes). */
+  v: number;
+}
+
+/** Outdoor weather: rain and mist strength 0..1, occasional lightning, wind for the plants. */
+export interface Weather {
+  rain: number;
+  mist: number;
+  lightning: boolean;
+  wind: number;
+}
+
 export interface ReflectionProbe {
   pos: V3;
   /** Box bounds of the zone the probe serves. */
@@ -162,4 +184,13 @@ export interface MapDef {
   moonDir: V3;
   /** Floors get wet (puddles, rain, leaks) only below this height (default 0.6 m). */
   wetMaxY?: number;
+  /** Outdoor map: open sky, moonlight everywhere it isn't blocked. */
+  outdoor?: boolean;
+  /** Outdoor: the clearing the moon lights directly (the jungle around it stays under the canopy). */
+  openSky?: { min: V3; max: V3 };
+  terrain?: TerrainDef;
+  plants?: PlantPlacement[];
+  weather?: Weather;
+  /** Distance fog (defaults to the bunker haze). */
+  fog?: { color: number; density: number };
 }

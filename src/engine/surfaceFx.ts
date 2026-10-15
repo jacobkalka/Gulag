@@ -84,7 +84,10 @@ const FRAG_ALBEDO = /* glsl */ `
   vec2 sfxUv = abs( vSfxUp ) > 0.5 ? vSfxPos.xz : vec2( vSfxPos.x + vSfxPos.z, vSfxPos.y );
   float sfxMacro = sfxNoise( sfxUv * 0.31 ) * 0.62 + sfxNoise( sfxUv * 1.17 + 7.3 ) * 0.38;
   diffuseColor.rgb *= mix( 1.0, mix( 0.84, 1.1, sfxMacro ), uMacroAmount );
-  float sfxWet = texture2D( uWetMap, ( vSfxPos.xz - uWetBounds.xy ) * uWetBounds.zw ).r;
+  vec4 sfxWetTex = texture2D( uWetMap, ( vSfxPos.xz - uWetBounds.xy ) * uWetBounds.zw );
+  // green holds the height of the roof overhead (/16 m, 0 = open sky): rain doesn't reach below it
+  float sfxRoof = sfxWetTex.g * 16.0;
+  float sfxWet = sfxWetTex.r * ( 1.0 - step( 0.01, sfxRoof ) * step( vSfxPos.y, sfxRoof - 0.12 ) );
   sfxWet *= smoothstep( 0.55, 0.9, vSfxUp ) * step( vSfxPos.y, uWetMaxY );
   sfxWet = smoothstep( 0.22, 0.72, sfxWet + ( sfxNoise( vSfxPos.xz * 2.7 ) - 0.5 ) * 0.36 );
   diffuseColor.rgb *= mix( 1.0, 0.58, sfxWet );`;
@@ -119,7 +122,7 @@ export function applySurfaceFx(mat: THREE.MeshStandardMaterial): void {
     sh.fragmentShader = inject(sh.fragmentShader, '#include <roughnessmap_fragment>', FRAG_ROUGH);
     sh.fragmentShader = inject(sh.fragmentShader, '#include <normal_fragment_maps>', FRAG_NORMAL);
   };
-  mat.customProgramCacheKey = () => 'surfaceFx1';
+  mat.customProgramCacheKey = () => 'surfaceFx2';
   mat.needsUpdate = true;
 }
 
@@ -135,6 +138,16 @@ export interface WetSource {
   wet: number;
 }
 
+/** Cover overhead (a roof, a slab, a container lid): center, half extents, yaw and top height. */
+export interface RoofRect {
+  x: number;
+  z: number;
+  hx: number;
+  hz: number;
+  rot: number;
+  top: number;
+}
+
 /**
  * Rasterizes wet sources (discs) and wet rectangles into a top-down mask, 4 texels per meter.
  */
@@ -143,6 +156,7 @@ export function buildWetMask(
   discs: WetSource[],
   rects: { min: [number, number]; max: [number, number]; wet: number; soft: number }[],
   maxY: number,
+  roofs: RoofRect[] = [],
 ): WetMask {
   const ppm = 4;
   const x0 = bounds.min[0];
@@ -178,6 +192,31 @@ export function buildWetMask(
   for (let k = 0; k < W * H; k++) {
     data[k * 4] = Math.round(Math.min(1, field[k]) * 255);
     data[k * 4 + 3] = 255;
+  }
+  // roof heights (green): the highest cover over each texel, as a rotated rectangle
+  for (const r of roofs) {
+    if (r.top <= 0.02) continue;
+    const c = Math.cos(r.rot);
+    const s = Math.sin(r.rot);
+    const ex = Math.abs(c) * r.hx + Math.abs(s) * r.hz;
+    const ez = Math.abs(s) * r.hx + Math.abs(c) * r.hz;
+    const i0 = Math.max(0, Math.floor(((r.x - ex - x0) / sx) * W));
+    const i1 = Math.min(W - 1, Math.ceil(((r.x + ex - x0) / sx) * W));
+    const j0 = Math.max(0, Math.floor(((r.z - ez - z0) / sz) * H));
+    const j1 = Math.min(H - 1, Math.ceil(((r.z + ez - z0) / sz) * H));
+    const g = Math.round(Math.min(1, r.top / 16) * 255);
+    for (let j = j0; j <= j1; j++) {
+      const dz = z0 + ((j + 0.5) / H) * sz - r.z;
+      for (let i = i0; i <= i1; i++) {
+        const dx = x0 + ((i + 0.5) / W) * sx - r.x;
+        // into the rectangle's own frame (yaw like Object3D.rotation.y)
+        const lx = c * dx - s * dz;
+        const lz = s * dx + c * dz;
+        if (Math.abs(lx) > r.hx || Math.abs(lz) > r.hz) continue;
+        const k = (j * W + i) * 4 + 1;
+        if (g > data[k]) data[k] = g;
+      }
+    }
   }
   const tex = new THREE.DataTexture(data, W, H, THREE.RGBAFormat, THREE.UnsignedByteType);
   tex.magFilter = THREE.LinearFilter;

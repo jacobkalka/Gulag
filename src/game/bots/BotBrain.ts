@@ -206,7 +206,7 @@ export class BotBrain {
       if (!inFov) continue;
       const th = e.y + eyeHeight(e) - 0.05;
       const tc = e.y + eyeHeight(e) * 0.72;
-      const seen = sim.world.lineOfSight(me.x, ey, me.z, e.x, th, e.z) || sim.world.lineOfSight(me.x, ey, me.z, e.x, tc, e.z);
+      const seen = sim.world.canSee(me.x, ey, me.z, e.x, th, e.z) || sim.world.canSee(me.x, ey, me.z, e.x, tc, e.z);
       if (!seen) continue;
       let m = this.mem.get(e.id);
       if (!m) {

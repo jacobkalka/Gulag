@@ -6,7 +6,7 @@ import { Assets } from '@/assets/Assets';
 import { buildWeapon, weaponIds } from '@/assets/models/weapons';
 import { SoldierView } from '@/game/view/soldier/SoldierView';
 import type { RenderPlayer } from '@/game/view/renderPlayer';
-import { buildSublevel9 } from '@/game/world/sublevel9';
+import { buildMap, MAP_IDS } from '@/game/world/maps';
 import { MapView } from '@/game/view/MapView';
 import { bakeReflectionProbe } from '@/game/view/ReflectionProbe';
 import { PROPS } from '@/assets/models/props';
@@ -18,14 +18,25 @@ import { DEFAULT_SETTINGS } from '@/app/settings';
 // Art test views:
 //   #/arttest            – map section + character + weapons under final lighting
 //   #/arttest/guns       – weapon lineup under studio light
-//   Query: ?q=low|medium|high|ultra  &cam=<name>
+//   Query: ?q=low|medium|high|ultra  &map=<id>  &cam=<name>
 /** Fixed cameras per map used by screenshots and `npm run audit:contrast`. */
 export const ART_CAMS: Record<string, string[]> = {
   sublevel9: ['hero', 'shaft', 'boiler', 'cells', 'lockers', 'spawn', 'fpcells', 'cistern', 'catwalk'],
+  monsoon: ['pad', 'jungle', 'swamp', 'ridge', 'river', 'barracks', 'motor', 'spawn', 'fpgate'],
+};
+
+/**
+ * Contrast limits per map for the audit where they differ from the defaults. Monsoon's jungle is
+ * dark on purpose (under the canopy the flashlight does the work), so its views may hold more
+ * near-black and a narrower range than the bunker's.
+ */
+export const ART_LIMITS: Record<string, { minRange?: number; minStd?: number; maxBlack?: number }> = {
+  monsoon: { minRange: 0.15, minStd: 0.05, maxBlack: 0.5 },
 };
 
 export async function runArtTest(canvas: HTMLCanvasElement): Promise<void> {
   (window as unknown as { __artCams: unknown }).__artCams = ART_CAMS;
+  (window as unknown as { __artLimits: unknown }).__artLimits = ART_LIMITS;
   const parts = location.hash.split('/');
   const mode = parts[2] ?? 'scene';
   const params = new URLSearchParams(location.hash.split('?')[1] ?? '');
@@ -45,7 +56,9 @@ export async function runArtTest(canvas: HTMLCanvasElement): Promise<void> {
   return scene(renderer, assets, params);
 }
 
-const CAMS: Record<string, { pos: [number, number, number]; look: [number, number, number]; fov: number }> = {
+type Cam = { pos: [number, number, number]; look: [number, number, number]; fov: number };
+
+const CAMS: Record<string, Cam> = {
   // soldier at the collapse's north-west corner, the split stairs and balcony behind
   hero: { pos: [-2.4, 1.5, 5.4], look: [-7.6, 1.5, 7.6], fov: 60 },
   // from the north balcony down into the pit, moonlight and the riser
@@ -63,39 +76,66 @@ const CAMS: Record<string, { pos: [number, number, number]; look: [number, numbe
   catwalk: { pos: [-21.4, 4.82, 22.9], look: [0, 3.0, 17.0], fov: 70 },
 };
 
+const MONSOON_CAMS: Record<string, Cam> = {
+  // the soldier by the helipad sandbags, the wreck and the command post on stilts behind
+  hero: { pos: [-9.6, 1.6, -9.6], look: [-4.8, 1.3, -4.6], fov: 60 },
+  pad: { pos: [-3.5, 1.7, -12.5], look: [0.5, 1.8, 8.0], fov: 70 },
+  char: { pos: [-7.6, 1.4, -8.4], look: [-6.0, 1.1, -6.4], fov: 45 },
+  guns: { pos: [-6.3, 1.5, -8.0], look: [-5.3, 1.0, -6.9], fov: 45 },
+  // west jungle north of the spawn clearing: a buttress giant, palms, tree ferns, ferns
+  jungle: { pos: [-35.5, 1.7, 2.5], look: [-44.0, 0.9, 13.0], fov: 70 },
+  swamp: { pos: [-28.5, 1.9, 20.5], look: [-40.0, 0.6, 26.0], fov: 70 },
+  ridge: { pos: [2.5, 1.75, 18.6], look: [-1.0, 4.4, 28.0], fov: 70 },
+  river: { pos: [-9.0, 1.2, -21.6], look: [3.0, 0.0, -30.5], fov: 70 },
+  barracks: { pos: [-28.0, 1.7, -3.0], look: [-17.0, 1.6, -10.5], fov: 70 },
+  motor: { pos: [-7.5, 1.7, 5.8], look: [-20.0, 1.4, 10.5], fov: 70 },
+  spawn: { pos: [-44.6, 2.1, -4.5], look: [-31.0, 1.4, 1.0], fov: 70 },
+  // first person at the west gate looking into the base
+  fpgate: { pos: [-39.0, 1.62, -3.0], look: [-20.0, 1.3, -2.5], fov: 72 },
+};
+
+/** Per map: the cameras, where the soldier stands and the crate with the guns. */
+const ART_SCENES: Record<string, { cams: Record<string, Cam>; soldier: { x: number; z: number; y: number; yaw: number }; crate: { x: number; z: number; y: number } }> = {
+  sublevel9: { cams: CAMS, soldier: { x: -7.4, z: 6.9, y: 0, yaw: -0.85 }, crate: { x: -5.0, z: 7.4, y: 0 } },
+  monsoon: { cams: MONSOON_CAMS, soldier: { x: -6.2, z: -6.0, y: 0.15, yaw: -0.4 }, crate: { x: -4.6, z: -6.7, y: 0.15 } },
+};
+
 async function scene(renderer: Renderer, assets: Assets, params: URLSearchParams): Promise<void> {
   const quality = renderer.options.quality;
-  const map = buildSublevel9();
+  const mapId = MAP_IDS.includes(params.get('map') ?? '') ? params.get('map')! : 'sublevel9';
+  const map = buildMap(mapId);
+  const art = ART_SCENES[mapId] ?? ART_SCENES.sublevel9;
+  renderer.options = { ...renderer.options, ...gradeOptions(mapId, { ...DEFAULT_SETTINGS, quality: quality.level, visualStyle: (params.get('style') ?? 'cinematic') as 'cinematic' | 'balanced' | 'natural' }) };
   const view = new MapView(map, assets.materials, quality);
   const sc = new THREE.Scene();
   sc.background = new THREE.Color(0x05070a);
-  sc.fog = new THREE.FogExp2(0x0b0f14, 0.028);
+  sc.fog = new THREE.FogExp2(map.fog?.color ?? 0x0b0f14, map.fog?.density ?? 0.028);
   sc.add(view.root);
 
-  // Soldier holding the Halberd at the collapse's north-west corner, watching the pit
+  // Soldier holding the Halberd near the map's showpiece
   const soldier = new SoldierView(assets.materials, assets.soldiers.red, 0);
   sc.add(soldier.root);
-  soldier.update(standing({ x: -7.4, z: 6.9, yaw: -0.85, pitch: -0.12, weapon: 'halberd' }), 1 / 60);
+  soldier.update(standing({ x: art.soldier.x, y: art.soldier.y, z: art.soldier.z, yaw: art.soldier.yaw, pitch: -0.12, weapon: 'halberd' }), 1 / 60);
 
   // Weapons laid on a crate in the foreground
-  const C = { x: -5.0, z: 7.4 };
+  const C = art.crate;
   const crate = PROPS.crate.build(assets.materials, 0);
-  crate.position.set(C.x, 0, C.z);
+  crate.position.set(C.x, C.y, C.z);
   crate.rotation.y = 0.35;
   sc.add(crate);
   const rook = buildWeapon(assets.materials, 'rook9');
-  rook.root.position.set(C.x - 0.13, 1.03, C.z + 0.15);
+  rook.root.position.set(C.x - 0.13, C.y + 1.03, C.z + 0.15);
   rook.root.rotation.set(0, 0.35 + Math.PI / 2 + 0.25, Math.PI / 2);
   sc.add(rook.root);
   const warden = buildWeapon(assets.materials, 'warden');
-  warden.root.position.set(C.x + 0.2, 1.022, C.z - 0.2);
+  warden.root.position.set(C.x + 0.2, C.y + 1.022, C.z - 0.2);
   warden.root.rotation.set(0, -0.9, Math.PI / 2);
   sc.add(warden.root);
 
   const camName = params.get('cam') ?? 'hero';
   // free camera for inspection: cam=free&pos=x,y,z&look=x,y,z&fov=60
   const v3 = (k: string) => (params.get(k) ?? '').split(',').map(Number) as [number, number, number];
-  const cv = camName === 'free' ? { pos: v3('pos'), look: v3('look'), fov: Number(params.get('fov') ?? 60) } : (CAMS[camName] ?? CAMS.hero);
+  const cv = camName === 'free' ? { pos: v3('pos'), look: v3('look'), fov: Number(params.get('fov') ?? 60) } : (art.cams[camName] ?? art.cams.hero);
   const cam = new THREE.PerspectiveCamera(cv.fov, 16 / 9, 0.05, 200);
   cam.position.set(...cv.pos);
   cam.lookAt(...cv.look);
@@ -232,9 +272,9 @@ function charLineup(renderer: Renderer, assets: Assets): void {
 }
 
 /** A standing, aiming render state for static dev shots. */
-function standing(o: { x: number; z: number; yaw: number; pitch: number; weapon: string }): RenderPlayer {
+function standing(o: { x: number; y?: number; z: number; yaw: number; pitch: number; weapon: string }): RenderPlayer {
   return {
-    id: 0, team: 0, name: 'soldier', alive: true, x: o.x, y: 0, z: o.z, vx: 0, vz: 0, yaw: o.yaw, pitch: o.pitch,
+    id: 0, team: 0, name: 'soldier', alive: true, x: o.x, y: o.y ?? 0, z: o.z, vx: 0, vz: 0, yaw: o.yaw, pitch: o.pitch,
     crouch: 0, slide: false, grounded: true, ads: 0, sprint: false, weapon: o.weapon, reloading: false, hp: 100, deathYaw: 0,
   };
 }

@@ -43,6 +43,7 @@ const DEFS: Record<string, MatDef> = {
   plasterCream: { tex: 'plasterCream', env: 0.6 },
   plasterGreen: { tex: 'plasterGreen', env: 0.6 },
   wood: { tex: 'wood', env: 0.4 },
+  deck: { tex: 'deck', env: 0.4 },
   hazard: { tex: 'hazard', env: 0.6 },
   mattress: { tex: 'mattress', env: 0.3 },
   rubberMat: { tex: 'rubber', env: 0.4 },
@@ -79,6 +80,14 @@ const DEFS: Record<string, MatDef> = {
   sleeveRed: { tex: 'sleeveRed', env: 0.5 },
   sleeveCamo: { tex: 'sleeveCamo', env: 0.5 },
   armor: { tex: 'armor', env: 0.8 },
+  // --- Outdoor
+  jungleFloor: { tex: 'jungleFloor', env: 0.4 },
+  mud: { tex: 'mud', env: 0.7 },
+  bark: { tex: 'bark', env: 0.3 },
+  palmBark: { tex: 'palmBark', env: 0.3 },
+  canvas: { tex: 'canvas', env: 0.3 },
+  corrugated: { tex: 'corrugated', env: 0.8 },
+  sandbag: { tex: 'sandbag', env: 0.3 },
   leather: { tex: 'leather', env: 0.6 },
   visor: { color: 0x07090b, rough: 0.08, metal: 0.6, env: 1.8, physical: true, exempt: 'coated optic: clear-coat reflections only' },
   // team ID tape: matte and muted, it only shows where light falls (no glow giving players away in the dark)
@@ -99,6 +108,7 @@ export const ENV_SCALE = 0.5;
 const SURFACE_FX = new Set([
   'concrete', 'concreteDark', 'floor', 'tileWhite', 'tileGreen', 'tileFloor', 'paintGreen', 'paintGrey', 'paintBlue',
   'paintOrange', 'rust', 'diamond', 'brick', 'plasterCream', 'plasterGreen', 'wood', 'hazard', 'rubberMat',
+  'jungleFloor', 'mud', 'canvas', 'corrugated', 'sandbag', 'deck',
 ]);
 /** Mostly metallic materials: no diffuse light, so they keep most of their reflections. */
 const METALLIC = new Set(['chrome', 'darkMetal', 'steelPipe', 'diamond', 'gunSteel', 'gunAlu', 'gunAluTan', 'gunBrass', 'rust']);

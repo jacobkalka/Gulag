@@ -10,7 +10,7 @@ import { saveInputModePref } from './state';
 import { gradeOptions } from '@/game/view/lighting/grading';
 import { currentSpread } from '@/game/sim/weaponLogic';
 import { getWeapon } from '@/data/weapons';
-import { buildSublevel9 } from '@/game/world/sublevel9';
+import { buildMap, MAP_IDS } from '@/game/world/maps';
 import type { MapDef } from '@/game/world/mapTypes';
 import { HostSession } from '@/game/session/HostSession';
 import type { MatchSession } from '@/game/session/Session';
@@ -37,6 +37,8 @@ export type Screen = 'boot' | 'menu' | 'match' | 'results';
 const MENU_ANCHORS: Record<string, [number, number, number]> = {
   // north floor of the collapse, the pit and the moonlight behind the lineup
   sublevel9: [0, 0, 6.2],
+  // the helipad, the wrecked helicopter and the command post behind the lineup
+  monsoon: [0, 0.15, -9.5],
 };
 
 export class GameController {
@@ -67,6 +69,11 @@ export class GameController {
   private stage: { group: THREE.Group; ops: Operator[]; on: boolean; blend: number } | null = null;
   /** Loadout screen turntable (lights always exist so toggling never recompiles shaders). */
   private showcase: { group: THREE.Group; key: THREE.SpotLight; rim: THREE.PointLight; fill: THREE.PointLight; model: WeaponModel | null; id: string | null; t: number; blend: number } | null = null;
+
+  /** Every map id (audits and tests ask for this). */
+  mapIds(): string[] {
+    return [...MAP_IDS];
+  }
 
   constructor(readonly canvas: HTMLCanvasElement, readonly uiRoot: HTMLElement) {
     const st = settings.value;
@@ -107,9 +114,12 @@ export class GameController {
     onProgress(0.02, 'Initializing renderer');
     await tick();
     this.assets = await Assets.create(this.renderer.gl, this.renderer.options.quality, (f, l) => onProgress(0.05 + f * 0.55, l));
-    onProgress(0.62, 'Building Sublevel 9');
+    // ?map=<id> picks the map (until the map vote lands)
+    const want = new URLSearchParams(location.search).get('map') ?? 'sublevel9';
+    const mapId = MAP_IDS.includes(want) ? want : 'sublevel9';
+    onProgress(0.62, 'Building the map');
     await tick();
-    this.map = buildSublevel9();
+    this.map = buildMap(mapId);
     this.buildMenuScene();
     onProgress(0.75, 'Synthesizing audio');
     await tick();
@@ -138,7 +148,7 @@ export class GameController {
       chromaticAberration: s.chromaticAberration,
       filmGrain: s.filmGrain,
       vignette: s.vignette,
-      ...gradeOptions(this.match ? this.match.mapId : 'sublevel9', s, QUALITY_PRESETS[s.quality].level),
+      ...gradeOptions(this.match ? this.match.mapId : (this.map?.id ?? 'sublevel9'), s, QUALITY_PRESETS[s.quality].level),
     });
     if (this.match) this.match.bindRenderer();
     else if (this.menuScene && this.menuCam) this.renderer.setScenes(this.menuScene, this.menuCam);
@@ -158,8 +168,9 @@ export class GameController {
   private buildMenuScene(): void {
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x05070a);
-    scene.fog = new THREE.FogExp2(0x0b0f14, 0.03);
+    scene.fog = new THREE.FogExp2(this.map.fog?.color ?? 0x0b0f14, this.map.fog?.density ?? 0.03);
     const q = this.renderer.options.quality;
+    this.renderer.options = { ...this.renderer.options, ...gradeOptions(this.map.id, settings.value, q.level) };
     this.menuMap = new MapView(this.map, this.assets.materials, { ...q, fixtureLights: Math.min(q.fixtureLights, 8) }, {});
     scene.add(this.menuMap.root);
     const cam = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.05, 200);

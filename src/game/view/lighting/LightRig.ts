@@ -563,7 +563,7 @@ function haloSize(d: LightDef): number {
     case 'flood':
     case 'searchlight':
     case 'lamppost':
-      return 1.6;
+      return 1.15;
     case 'emergency':
     case 'beacon':
       return 0.7;
@@ -575,6 +575,6 @@ function haloSize(d: LightDef): number {
 }
 
 function haloGain(d: LightDef): number {
-  const base = d.fixture === 'flood' || d.fixture === 'searchlight' ? 0.9 : d.fixture === 'emergency' || d.fixture === 'beacon' ? 0.8 : 0.55;
+  const base = d.fixture === 'flood' || d.fixture === 'searchlight' ? 0.62 : d.fixture === 'emergency' || d.fixture === 'beacon' ? 0.8 : 0.55;
   return base * Math.min(1.6, d.intensity / 4);
 }

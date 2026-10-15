@@ -1,13 +1,20 @@
-import type { Surface, V3 } from './mapTypes';
+import type { PlantKind, Surface, V3 } from './mapTypes';
 
 // Collision proxies for props, in prop-local space (origin on the floor, yaw applied by the map).
 // Kept free of rendering code so the simulation never depends on three.js.
+
+/**
+ * How a collider blocks: default is everything (movement, bullets, sight); 'solid' stops movement
+ * only (razor wire); 'conceal' stops movement and sight but not bullets (tents).
+ */
+export type ColliderFlags = 'solid' | 'conceal';
 
 export interface PropAABB {
   kind: 'box';
   min: V3;
   max: V3;
   surface: Surface;
+  flags?: ColliderFlags;
 }
 export interface PropCyl {
   kind: 'cyl';
@@ -17,6 +24,7 @@ export interface PropCyl {
   y0: number;
   y1: number;
   surface: Surface;
+  flags?: ColliderFlags;
 }
 export interface PropRamp {
   kind: 'ramp';
@@ -25,10 +33,17 @@ export interface PropRamp {
   axis: 'x' | 'z';
   dir: 1 | -1;
   surface: Surface;
+  flags?: ColliderFlags;
 }
 export type PropCollider = PropAABB | PropCyl | PropRamp;
 
-const bx = (min: V3, max: V3, surface: Surface = 'concrete'): PropAABB => ({ kind: 'box', min, max, surface });
+const bx = (min: V3, max: V3, surface: Surface = 'concrete', flags?: ColliderFlags): PropAABB => ({ kind: 'box', min, max, surface, flags });
+
+/** Trunk radius per plant kind at scale 1 (0 = walk through it). */
+export const PLANT_TRUNK: Record<PlantKind, number> = { fern: 0, treeFern: 0.16, palm: 0.24, banana: 0.12, monstera: 0, bush: 0, grass: 0, buttress: 0.95 };
+
+/** Foliage that hides a player from sight (bots too) without stopping bullets: radius and height at scale 1. */
+export const PLANT_COVER: Partial<Record<PlantKind, { r: number; h: number }>> = { bush: { r: 0.75, h: 1.45 }, banana: { r: 0.9, h: 2.4 }, monstera: { r: 0.7, h: 1.1 } };
 
 export const PROP_COLLIDERS: Record<string, (v: number) => PropCollider[]> = {
   rubble: () => [bx([-0.7, 0, -0.55], [0.7, 0.28, 0.55]), bx([-0.4, 0, -0.32], [0.4, 0.5, 0.32])],
@@ -66,4 +81,12 @@ export const PROP_COLLIDERS: Record<string, (v: number) => PropCollider[]> = {
   },
   lockersFallen: () => [bx([-0.68, 0, 0.0], [0.68, 0.52, 2.0], 'metal')],
   generator: () => [bx([-1.6, 0, -0.75], [1.6, 1.75, 0.75], 'metal'), { kind: 'cyl', x: 1.15, z: 0.35, r: 0.14, y0: 1.75, y1: 3.4, surface: 'metal' }],
+  // outdoor base props (see assets/models/basecamp.ts)
+  container: () => [bx([-3.03, 0, -1.22], [3.03, 2.59, 1.22], 'metal')],
+  tent: () => [bx([-2.0, 0, -2.5], [2.0, 2.2, 2.5], 'fabric', 'conceal')],
+  sandbags: () => [bx([-1.0, 0, -0.31], [1.0, 1.0, 0.31], 'fabric')],
+  razorWire: () => [bx([-1.1, 0, -0.4], [1.1, 0.85, 0.4], 'metal', 'solid')],
+  jeep: () => [bx([-1.75, 0, -0.78], [1.7, 1.25, 0.78], 'metal')],
+  truck: () => [bx([1.25, 0, -1.2], [3.9, 2.7, 1.2], 'metal'), bx([-3.25, 0, -1.25], [1.25, 3.1, 1.25], 'metal')],
+  heliWreck: () => [bx([-1.15, 0, -2.2], [1.15, 2.2, 2.2], 'metal'), bx([-0.85, 0, 2.2], [0.85, 1.6, 3.3], 'metal'), bx([-0.4, 0, -6.6], [1.4, 0.7, -2.2], 'metal')],
 };

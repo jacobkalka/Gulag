@@ -7,15 +7,30 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { LightRig } from './lighting/LightRig';
 import { BakedProbes } from './lighting/ProbeBaker';
 import { Atmosphere } from './Atmosphere';
+import { Weather } from './Weather';
+import { buildTerrainMeshes } from './TerrainView';
+import { PlantsView } from './PlantsView';
+import { canopyShade } from './canopy';
+import { PROP_COLLIDERS } from '@/game/world/propColliders';
+import { terrainHeight } from '@/game/world/terrain';
 import type { QualityPreset } from '@/engine/quality';
 import { CollisionWorld } from '@/game/world/collision';
 import { DecalLayer, scatterDecals } from './Decals';
 import { scatterClutter } from './Clutter';
 import { DECAL_CELLS } from '@/assets/textures/decalAtlas';
-import { bindWetMask, buildWetMask, type WetMask, type WetSource } from '@/engine/surfaceFx';
+import { bindWetMask, buildWetMask, type RoofRect, type WetMask, type WetSource } from '@/engine/surfaceFx';
 
 // Builds the renderable map from a MapDef: merged static geometry per material,
-// props, decals, light fixtures (via LightRig), baked probes and atmosphere.
+// props, decals, light fixtures (via LightRig), baked probes and atmosphere. Outdoor maps add
+// terrain, instanced plants and weather (storm sky, rain, lightning) in place of the bunker sky.
+
+/** Sky and particles over the map: the bunker's sky holes or an outdoor storm. */
+export interface SkyLayer {
+  readonly group: THREE.Group;
+  readonly moon: THREE.SpotLight;
+  setPixelScale(heightPx: number): void;
+  update(t: number, dt: number, camera: THREE.Camera): void;
+}
 
 interface Bucket {
   pos: number[];
@@ -185,7 +200,10 @@ export class MapView {
   readonly root = new THREE.Group();
   readonly lights: LightRig;
   readonly probes: BakedProbes;
-  readonly atmosphere: Atmosphere;
+  readonly atmosphere: SkyLayer;
+  /** The outdoor storm (lightning level for effects), null indoors. */
+  readonly weather: Weather | null = null;
+  readonly plants: PlantsView | null = null;
   readonly map: MapDef;
   decals: DecalLayer | null = null;
   private puddleMat: THREE.MeshStandardMaterial | null = null;
@@ -202,10 +220,12 @@ export class MapView {
     // Static geometry is merged into per-(material, zone chunk, shadow) batches so the whole
     // map draws in roughly (materials x 9) calls while keeping coarse frustum culling.
     const batches = new Map<string, { mat: THREE.Material; cast: boolean; exempt: string; geos: THREE.BufferGeometry[] }>();
-    // coarse culling chunks: about 18 m squares over the map bounds
+    // coarse culling chunks: about 18 m squares over the map bounds (32 m outdoors, where little
+    // is hidden behind walls anyway and every shadow-casting light redraws each batch it sees)
     const [bx0, by0, bz0] = map.bounds.min;
-    const ncx = Math.max(1, Math.round((map.bounds.max[0] - bx0) / 18));
-    const ncz = Math.max(1, Math.round((map.bounds.max[2] - bz0) / 18));
+    const chunkM = map.outdoor ? 32 : 18;
+    const ncx = Math.max(1, Math.round((map.bounds.max[0] - bx0) / chunkM));
+    const ncz = Math.max(1, Math.round((map.bounds.max[2] - bz0) / chunkM));
     const chunkOf = (x: number, z: number) => {
       const cx = Math.min(ncx - 1, Math.max(0, Math.floor(((x - bx0) / (map.bounds.max[0] - bx0)) * ncx)));
       const cz = Math.min(ncz - 1, Math.max(0, Math.floor(((z - bz0) / (map.bounds.max[2] - bz0)) * ncz)));
@@ -267,6 +287,12 @@ export class MapView {
       if (p.tag && !tags.has(p.tag)) continue;
       placeProp(p);
     }
+    // ---- outdoor ground and vegetation
+    if (map.terrain) for (const m of buildTerrainMeshes(map.terrain, lib)) this.root.add(m);
+    if (map.plants?.length) {
+      this.plants = new PlantsView(map.plants, lib, { density: quality.foliage });
+      this.root.add(this.plants.group);
+    }
     for (const g of cache.values()) g.traverse((o) => (o as THREE.Mesh).isMesh && (o as THREE.Mesh).geometry.dispose());
     cache.clear();
     // ---- lights: steady fixtures merge into the static batches, flickering ones stay separate
@@ -322,7 +348,9 @@ export class MapView {
       wet.push({ x: g.pos.x + g.normal.x * 0.35, z: g.pos.z + g.normal.z * 0.35, r: g.w * 0.3, soft: 0.7, wet: 0.85 });
     }
     const holes = map.skyHoles.map((h) => ({ min: [h.min[0], h.min[2]] as [number, number], max: [h.max[0], h.max[2]] as [number, number], wet: 0.6, soft: 1.2 }));
-    this.wetMask = buildWetMask(map.bounds, wet, holes, map.wetMaxY ?? 0.6);
+    // outdoors the rain soaks everything that isn't under a roof
+    if (map.outdoor && map.weather?.rain) holes.push({ min: [map.bounds.min[0], map.bounds.min[2]], max: [map.bounds.max[0], map.bounds.max[2]], wet: 0.5 * map.weather.rain, soft: 0.01 });
+    this.wetMask = buildWetMask(map.bounds, wet, holes, map.wetMaxY ?? 0.6, map.outdoor ? roofRects(map, tags) : []);
     // ---- build batches
     for (const b of batches.values()) {
       const mesh = new THREE.Mesh(mergeGeos(b.geos), b.mat);
@@ -333,20 +361,47 @@ export class MapView {
       mesh.name = `static:${b.mat.name}`;
       this.root.add(mesh);
     }
-    // baked bounce light from every fixture (and the moon through the roof)
-    this.probes = new BakedProbes(map, world, map.lights, {
-      spacing: 1.0,
-      bounce: 0.22,
-      floor: [0.003, 0.0034, 0.0042],
-      moon: { color: 0x9db4ff, irradiance: 1.1 },
-    });
+    // baked bounce light from every fixture (and the moon through the roof; outdoors also the
+    // overcast sky, both dimmed under the canopy)
+    this.probes = new BakedProbes(
+      map,
+      world,
+      map.lights,
+      map.outdoor
+        ? {
+            spacing: 2.0,
+            bounce: 0.22,
+            floor: [0.02, 0.022, 0.026],
+            moon: { color: 0x9db4ff, irradiance: 1.1 },
+            sky: { color: 0x9fb0cc, irradiance: 2.2 },
+            shade: canopyShade(map),
+          }
+        : {
+            spacing: 1.0,
+            bounce: 0.22,
+            floor: [0.003, 0.0034, 0.0042],
+            moon: { color: 0x9db4ff, irradiance: 1.1 },
+          },
+    );
     this.root.add(this.probes.grid);
-    this.atmosphere = new Atmosphere(map, {
-      shadows: quality.shadows,
-      shadowSize: quality.sunShadowSize,
-      lightShafts: quality.lightShafts,
-      particleScale: quality.particleScale,
-    });
+    if (map.outdoor) {
+      this.weather = new Weather(
+        map,
+        { shadows: quality.shadows, shadowSize: quality.sunShadowSize, particleScale: quality.particleScale, dynamicShadow: quality.sunShadowDynamic },
+        { texture: this.wetMask.texture, bounds: this.wetMask.bounds },
+      );
+      const terrain = map.terrain;
+      if (terrain) this.weather.settleOnGround((x, z) => terrainHeight(terrain, x, z));
+      this.atmosphere = this.weather;
+      if (this.plants) this.plants.shadowCameras = new Set([this.weather.moon.shadow.camera]);
+    } else {
+      this.atmosphere = new Atmosphere(map, {
+        shadows: quality.shadows,
+        shadowSize: quality.sunShadowSize,
+        lightShafts: quality.lightShafts,
+        particleScale: quality.particleScale,
+      });
+    }
     this.root.add(this.atmosphere.group);
     this.root.updateMatrixWorld(true);
   }
@@ -469,7 +524,8 @@ export class MapView {
     // slow drift on the standing water
     if (this.waterNormal) this.waterNormal.offset.set(t * 0.011, t * 0.007);
     this.lights.update(camera.position, t, dt, camera.getWorldDirection(this.camDir));
-    this.atmosphere.update(t);
+    this.atmosphere.update(t, dt, camera);
+    this.plants?.update(t, camera);
   }
 }
 
@@ -541,6 +597,44 @@ function puddleTextures(): PuddleTextures {
     alphaMap: tex(alpha, false),
   };
   return _puddle;
+}
+
+/** Everything that keeps rain off the ground below it: visible brushes and solid props. */
+function roofRects(map: MapDef, tags: Set<string>): RoofRect[] {
+  const out: RoofRect[] = [];
+  for (const br of map.brushes) {
+    if (br.visible === false || (br.tag && !tags.has(br.tag))) continue;
+    out.push({
+      x: (br.min[0] + br.max[0]) / 2,
+      z: (br.min[2] + br.max[2]) / 2,
+      hx: (br.max[0] - br.min[0]) / 2,
+      hz: (br.max[2] - br.min[2]) / 2,
+      rot: 0,
+      top: br.max[1],
+    });
+  }
+  for (const p of map.props) {
+    if (p.tag && !tags.has(p.tag)) continue;
+    const s = p.scale ?? 1;
+    const rot = p.rot ?? 0;
+    const c = Math.cos(rot);
+    const sn = Math.sin(rot);
+    for (const col of PROP_COLLIDERS[p.type]?.(p.v ?? 0) ?? []) {
+      if (col.kind !== 'box' || col.flags === 'solid') continue;
+      // local box center, rotated like Object3D.rotation.y
+      const lx = ((col.min[0] + col.max[0]) / 2) * s;
+      const lz = ((col.min[2] + col.max[2]) / 2) * s;
+      out.push({
+        x: p.pos[0] + c * lx + sn * lz,
+        z: p.pos[2] - sn * lx + c * lz,
+        hx: ((col.max[0] - col.min[0]) / 2) * s,
+        hz: ((col.max[2] - col.min[2]) / 2) * s,
+        rot,
+        top: p.pos[1] + col.max[1] * s,
+      });
+    }
+  }
+  return out;
 }
 
 function hashSeed(s: string): number {

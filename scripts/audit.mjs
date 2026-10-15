@@ -148,11 +148,14 @@ if (kind === 'contrast') {
   await page.goto(`${base}?offline=1#/arttest?q=${quality}&cam=list`, { waitUntil: 'load' });
   await page.waitForFunction(() => !!window.__artCams, null, { timeout: 240000 });
   const camsByMap = await page.evaluate(() => window.__artCams);
+  // maps can relax the limits (the night jungle is meant to be dark; see ART_LIMITS in the art test)
+  const limitsByMap = await page.evaluate(() => window.__artLimits ?? {});
   await page.close();
   const maps = args.maps ? args.maps.split(',') : Object.keys(camsByMap);
-  const LIMITS = { minRange: 0.32, minStd: 0.07, maxBlack: 0.35, maxWhite: 0.015 };
-  console.log(`limits: p95-p5 >= ${LIMITS.minRange}, std >= ${LIMITS.minStd}, near-black <= ${LIMITS.maxBlack * 100}%, near-white <= ${LIMITS.maxWhite * 100}%`);
+  const DEFAULT_LIMITS = { minRange: 0.32, minStd: 0.07, maxBlack: 0.35, maxWhite: 0.015 };
   for (const mapId of maps) {
+    const LIMITS = { ...DEFAULT_LIMITS, ...(limitsByMap[mapId] ?? {}) };
+    console.log(`${mapId} limits: p95-p5 >= ${LIMITS.minRange}, std >= ${LIMITS.minStd}, near-black <= ${LIMITS.maxBlack * 100}%, near-white <= ${LIMITS.maxWhite * 100}%`);
     for (const cam of camsByMap[mapId] ?? []) {
       const p = await browser.newPage({ viewport: { width: 1280, height: 720 } });
       await p.goto(`${base}?offline=1#/arttest?q=${quality}&map=${mapId}&cam=${cam}`, { waitUntil: 'load' });

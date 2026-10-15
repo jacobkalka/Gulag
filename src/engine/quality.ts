@@ -35,6 +35,8 @@ export interface QualityPreset {
   grimeDecals: number;
   /** Seeded loose clutter (paper, cans, debris) merged into the static batches. */
   clutter: number;
+  /** Share of the small ground plants kept on outdoor maps (trees and bushes always stay: they block and hide). */
+  foliage: number;
 }
 
 export const QUALITY_PRESETS: Record<QualityLevel, QualityPreset> = {
@@ -61,6 +63,7 @@ export const QUALITY_PRESETS: Record<QualityLevel, QualityPreset> = {
     decalLimit: 64,
     grimeDecals: 200,
     clutter: 70,
+    foliage: 0.4,
   },
   medium: {
     level: 'medium',
@@ -85,6 +88,7 @@ export const QUALITY_PRESETS: Record<QualityLevel, QualityPreset> = {
     decalLimit: 128,
     grimeDecals: 400,
     clutter: 150,
+    foliage: 0.7,
   },
   high: {
     level: 'high',
@@ -109,6 +113,7 @@ export const QUALITY_PRESETS: Record<QualityLevel, QualityPreset> = {
     decalLimit: 256,
     grimeDecals: 560,
     clutter: 230,
+    foliage: 1,
   },
   ultra: {
     level: 'ultra',
@@ -133,6 +138,7 @@ export const QUALITY_PRESETS: Record<QualityLevel, QualityPreset> = {
     decalLimit: 400,
     grimeDecals: 700,
     clutter: 320,
+    foliage: 1,
   },
 };
 

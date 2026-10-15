@@ -147,7 +147,8 @@ export class MatchView {
     const s = o.session;
     this.camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.05, 220);
     this.scene.background = new THREE.Color(0x05070a);
-    this.scene.fog = new THREE.FogExp2(0x0b0f14, this.baseFog);
+    if (s.map.fog) this.baseFog = s.map.fog.density;
+    this.scene.fog = new THREE.FogExp2(s.map.fog?.color ?? 0x0b0f14, this.baseFog);
     this.mapView = new MapView(s.map, o.assets.materials, q, { activeTags: s.rules.mapTags, world: s.world });
     this.scene.add(this.mapView.root);
     this.effects = new Effects({ particleScale: q.particleScale, decalLimit: q.decalLimit });

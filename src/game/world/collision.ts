@@ -1,5 +1,6 @@
 import type { MapDef, Surface } from './mapTypes';
-import { PROP_COLLIDERS, type PropCollider } from './propColliders';
+import { PLANT_COVER, PLANT_TRUNK, PROP_COLLIDERS, type PropCollider } from './propColliders';
+import { rayTerrain, terrainHeight, type TerrainDef } from './terrain';
 
 // Static collision world: AABBs, vertical cylinders and ramps (wedges) in a uniform XZ grid.
 // Used by player movement (cylinder vs world), bullets/LOS (raycasts) and bot navigation.
@@ -7,6 +8,8 @@ import { PROP_COLLIDERS, type PropCollider } from './propColliders';
 
 export const SOLID = 1;
 export const OPAQUE = 2;
+/** Blocks sight but not bullets: foliage, tents. Bots look through OPAQUE | CONCEAL. */
+export const CONCEAL = 4;
 
 export const SURFACES: Surface[] = ['concrete', 'metal', 'tile', 'wood', 'water', 'fabric', 'glass', 'dirt'];
 
@@ -51,6 +54,9 @@ export class CollisionWorld {
   nx = 28;
   nz = 20;
   private cells: number[][] = [];
+  /** Outdoor ground (a heightfield under everything else). */
+  terrain: TerrainDef | null = null;
+  private terrainSurface = 0;
   private stamp: Uint32Array = new Uint32Array(0);
   private stampId = 1;
 
@@ -82,6 +88,17 @@ export class CollisionWorld {
       const cols = PROP_COLLIDERS[p.type];
       if (!cols) continue;
       for (const c of cols(p.v ?? 0)) w.addPropCollider(c, p.pos, p.rot ?? 0, p.scale ?? 1);
+    }
+    // plants: trunks block everything, leafy plants hide you without stopping bullets
+    for (const pl of map.plants ?? []) {
+      const r = PLANT_TRUNK[pl.kind] * pl.scale;
+      if (r > 0) w.addCyl(pl.pos[0], pl.pos[2], r, pl.pos[1] - 0.5, pl.pos[1] + (pl.kind === 'buttress' ? 24 : 3.5 * pl.scale), SOLID | OPAQUE, 'wood');
+      const cover = PLANT_COVER[pl.kind];
+      if (cover) w.addCyl(pl.pos[0], pl.pos[2], cover.r * pl.scale, pl.pos[1], pl.pos[1] + cover.h * pl.scale, CONCEAL, 'fabric');
+    }
+    if (map.terrain) {
+      w.terrain = map.terrain;
+      w.terrainSurface = Math.max(0, SURFACES.indexOf(map.terrain.surface));
     }
     w.finalize();
     return w;
@@ -118,7 +135,7 @@ export class CollisionWorld {
     const sin = Math.sin(rot);
     // three.js yaw rotation: x' = x cos + z sin ; z' = -x sin + z cos
     const tf = (x: number, z: number): [number, number] => [pos[0] + (x * cos + z * sin) * scale, pos[2] + (-x * sin + z * cos) * scale];
-    const flags = SOLID | OPAQUE;
+    const flags = c.flags === 'solid' ? SOLID : c.flags === 'conceal' ? SOLID | CONCEAL : SOLID | OPAQUE;
     if (c.kind === 'cyl') {
       const [x, z] = tf(c.x, c.z);
       this.addCyl(x, z, c.r * scale, pos[1] + c.y0 * scale, pos[1] + c.y1 * scale, flags, c.surface);
@@ -228,6 +245,13 @@ export class CollisionWorld {
         surf = p.surface;
       }
     });
+    if (this.terrain) {
+      const top = terrainHeight(this.terrain, x, z);
+      if (top <= feetY + maxUp && top >= feetY - maxDown && top > best) {
+        best = top;
+        surf = this.terrainSurface;
+      }
+    }
     return { y: best, surface: surf };
   }
 
@@ -302,6 +326,8 @@ export class CollisionWorld {
 
   /** True if a vertical cylinder overlaps any solid primitive (used to test standing up). */
   cylinderBlocked(x: number, y: number, z: number, r: number, h: number): boolean {
+    // the ground only blocks a body buried in it (standing on a slope is fine)
+    if (this.terrain && terrainHeight(this.terrain, x, z) > y + 0.3) return true;
     let blocked = false;
     this.queryXZ(x - r, z - r, x + r, z + r, (p) => {
       if (blocked || !(p.flags & SOLID)) return;
@@ -316,6 +342,14 @@ export class CollisionWorld {
   raycast(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, maxT: number, mask = OPAQUE): RayHit | null {
     let best: RayHit | null = null;
     let bestT = maxT;
+    // the ground stops everything: test it first so the grid walk can stop early
+    if (this.terrain && mask & (SOLID | OPAQUE)) {
+      const h = rayTerrain(this.terrain, ox, oy, oz, dx, dy, dz, maxT);
+      if (h) {
+        bestT = h.t;
+        best = { t: h.t, x: ox + dx * h.t, y: oy + dy * h.t, z: oz + dz * h.t, nx: h.nx, ny: h.ny, nz: h.nz, surface: surfaceName(this.terrainSurface), prim: -1 };
+      }
+    }
     const id = ++this.stampId;
     // 2D DDA over XZ cells
     let cx = this.cellX(ox);
@@ -366,6 +400,11 @@ export class CollisionWorld {
     const dy = by - ay;
     const dz = bz - az;
     return this.raycast(ax, ay, az, dx, dy, dz, 0.999, OPAQUE) === null;
+  }
+
+  /** Whether a person at a could see b: like lineOfSight, but foliage and tents hide you too. */
+  canSee(ax: number, ay: number, az: number, bx: number, by: number, bz: number): boolean {
+    return this.raycast(ax, ay, az, bx - ax, by - ay, bz - az, 0.999, OPAQUE | CONCEAL) === null;
   }
 }
 
