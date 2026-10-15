@@ -322,4 +322,7 @@ Status: ☐ open, ☑ done (verified by running it), ◐ partial (see notes).
     proxies; seeded wall-base clutter (paper, cans, debris, bricks, rebar, trays), no collision.
   - Tools: `npm run audit:shadows|textures|contrast`, `?perf` overlay, art-test free camera,
     `#/swatches/decals` and `#/swatches/props` boards, enemy-in-the-dark match shots.
+  - Verified: lint, typecheck, 85 unit tests, production build, `audit:shadows`, `audit:textures`
+    (116 materials, 0 problems) and `audit:contrast` (7/7 cameras) pass; e2e two-tab networked
+    round and touchpad mode pass. Before/after: [`screenshots/upgrade-m2/before-after.jpg`](screenshots/upgrade-m2/before-after.jpg).
 

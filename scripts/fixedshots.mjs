@@ -48,7 +48,8 @@ async function matchShot({ name, primary, kind }) {
   page.on('pageerror', (e) => errors.push(e.message));
   await page.goto(`${base}?offline=1&quality=${quality}`, { waitUntil: 'load' });
   await page.waitForSelector('[data-testid="practice"]', { timeout: 240000 });
-  await page.click(`[data-testid="playlist-${kind === 'ads' ? '4v4' : '1v1'}"]`);
+  // DOM click: the menu keeps the main thread busy rendering, which stalls Playwright's actionability checks
+  await page.$eval(`[data-testid="playlist-${kind === 'ads' ? '4v4' : '1v1'}"]`, (el) => el.click());
   // the click starts a synchronous match build; don't let Playwright wait on the busy page
   await page.$eval('[data-testid="practice"]', (el) => el.click());
   await page.waitForFunction(() => !!window.__game?.debug().session, null, { timeout: 240000 });
@@ -111,6 +112,9 @@ async function matchShot({ name, primary, kind }) {
       g.input.yaw = -Math.PI / 2;
       g.input.pitch = -0.05;
       Object.assign(en, { x: -9, z: -8.0, vx: 0, vz: 0, yaw: Math.PI / 2, pitch: -0.05 });
+      // the idled bots feed yaw 0; keep this one facing us so its flashlight points at the camera
+      const bot = s.bots?.get?.(en.id);
+      if (bot) bot.think = () => ({ seq: 0, mx: 0, mz: 0, yaw: Math.PI / 2, pitch: -0.05, buttons: 0, slot: 0, viewTick: 0 });
     });
     // give eye adaptation time to settle so the two frames compare at a steady exposure
     await page.waitForTimeout(5000);

@@ -52,7 +52,8 @@ async function bootMatch(page, mapId) {
   });
   await page.goto(`${base}?offline=1&quality=${quality}&map=${mapId}`, { waitUntil: 'load' });
   await page.waitForSelector('[data-testid="practice"]', { timeout: 240000 });
-  await page.click('[data-testid="playlist-4v4"]');
+  // DOM click: the menu keeps the main thread busy rendering, which stalls Playwright's actionability checks
+  await page.$eval('[data-testid="playlist-4v4"]', (el) => el.click());
   await page.$eval('[data-testid="practice"]', (el) => el.click());
   await page.waitForFunction(() => !!window.__game?.debug().match, null, { timeout: 240000 });
   await page.evaluate(() => {
