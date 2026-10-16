@@ -383,20 +383,28 @@ export class GameController {
       }
     }
     // Building the map's view takes a moment (seconds on slow machines) and blocks the page:
-    // put the deploy screen up first, then build once it has painted.
+    // put the deploy screen up first, then build once it has painted. A hidden tab builds right
+    // away: nobody sees the screen there, and its timers are throttled (a hidden host must still
+    // start the match for everyone). The background ticker also runs a pending build.
     const token = ++this.buildToken;
     deploying.value = MAP_INFO[session.map.id as MapId]?.name ?? session.map.name;
-    setTimeout(() => {
-      if (token !== this.buildToken) return;
+    const run = () => {
+      if (this.pendingBuild !== run) return;
+      this.pendingBuild = null;
       try {
         this.buildMatchView(session, meta);
       } finally {
         if (token === this.buildToken) deploying.value = null;
       }
-    }, 50);
+    };
+    this.pendingBuild = run;
+    if (typeof document !== 'undefined' && document.hidden) run();
+    else setTimeout(run, 50);
   }
 
   private buildToken = 0;
+  /** A match view waiting to be built behind the deploy screen. */
+  private pendingBuild: (() => void) | null = null;
 
   private buildMatchView(session: MatchSession, meta: MatchMeta): void {
     const mv = new MatchView({
@@ -427,6 +435,7 @@ export class GameController {
   leaveMatch(restoreMenu = true): void {
     // a match still waiting to be built is dropped
     this.buildToken++;
+    this.pendingBuild = null;
     deploying.value = null;
     if (this.match) {
       this.match.dispose();
@@ -508,6 +517,7 @@ export class GameController {
         if (now - this.last < 120) return; // frames are flowing normally
         const dt = Math.min(0.25, (now - this.last) / 1000);
         this.last = now;
+        this.pendingBuild?.();
         this.rooms.update();
         this.match?.backgroundTick(dt);
       };

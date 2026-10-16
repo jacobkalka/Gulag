@@ -480,4 +480,11 @@ Status: ☐ open, ☑ done (verified by running it), ◐ partial (see notes).
     near-black against the 50% limit (the run was stopped before the last camera).
   - Not done: KTX2 (no encoder here; the soldiers use WebP and everything else is generated),
     real-GPU frame rates (software renderer only).
+- **M9** Deploy. Pushed to `main`; the GitHub Pages deploy succeeded. The build container can't
+  open github.io (its network policy blocks the host), so the live page was not loaded from here.
+  - CI found a bug the local runs missed: with the deploy screen, a host in a hidden tab (CI's
+    headless browser hides one of the two tabs) built its match view on a main-thread timer, which
+    hidden tabs throttle, so the match never started for the guest. A hidden tab now builds right
+    away, and the background ticker also runs a pending build. Both two-tab tests pass locally
+    with CI's browser (Chromium headless shell) against the production build.
 
