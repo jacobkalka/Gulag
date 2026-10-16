@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'preact/hooks';
 import type { JSX } from 'preact';
-import { screen, paused, lastSummary, toasts, dismissToast, loading, selectedPlaylist, profile } from '@/app/state';
+import { screen, paused, lastSummary, toasts, dismissToast, loading, selectedPlaylist, profile, deploying } from '@/app/state';
 import type { GameController } from '@/app/GameController';
 import { awardMatch, type MatchAward } from '@/app/progressionService';
 import { settings } from '@/app/settings';
@@ -19,12 +19,28 @@ export function Loading(): JSX.Element {
       <div class="logo">
         LOCK<span>DOWN</span>
       </div>
-      <div class="tag">Sublevel 9 · win the round · earn the surface</div>
+      <div class="tag">Sublevel 9 · Monsoon · win the round</div>
       <div class="bar">
         <i style={{ width: `${Math.round(l.progress * 100)}%` }} />
       </div>
       <div class="status">{l.label}</div>
       {mobile && <div class="mobile-note">LOCKDOWN is built for desktop browsers with a mouse and keyboard. It may run on this device, but expect a rough ride.</div>}
+    </div>
+  );
+}
+
+/** Shown while a match's map is being built. */
+function Deploying(props: { map: string }): JSX.Element {
+  return (
+    <div class="loading deploying" data-testid="deploying">
+      <div class="logo">
+        LOCK<span>DOWN</span>
+      </div>
+      <div class="tag">Deploying · {props.map}</div>
+      <div class="bar">
+        <i style={{ width: '100%' }} />
+      </div>
+      <div class="status">Building the map</div>
     </div>
   );
 }
@@ -106,6 +122,7 @@ export function App(props: { game: GameController }): JSX.Element {
   return (
     <>
       {sc === 'boot' && <Loading />}
+      {deploying.value && <Deploying map={deploying.value} />}
       {sc === 'lobby' && <Lobby game={g} />}
       {sc === 'match' && (
         <>

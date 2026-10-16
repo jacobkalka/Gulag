@@ -22,7 +22,8 @@ test('touchpad mode: keyboard fire and aim, reduced hip spread, aim assist on/of
   // practice match; skip the countdown
   await page.click('[data-testid="playlist-1v1"]');
   await page.$eval('[data-testid="practice"]', (el) => (el as HTMLElement).click());
-  await page.waitForFunction(() => !!(window as any).__game?.debug().session, null, { timeout: 120_000 });
+  // the match view is built a moment after the session starts (behind the deploy screen)
+  await page.waitForFunction(() => !!(window as any).__game?.debug().match, null, { timeout: 120_000 });
   await page.evaluate(() => {
     const g = (window as any).__game;
     g.input.locked = true;

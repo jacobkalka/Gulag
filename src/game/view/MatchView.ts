@@ -8,11 +8,11 @@ import { settings, teamColors } from '@/app/settings';
 import { INPUT_TUNING, getWeapon } from '@/data/weapons';
 import { HEALTH } from '@/data/gameplay';
 import type { MatchSession, RenderPose } from '@/game/session/Session';
-import { BTN, type GameEvent, type PlayerInput, type PlayerState } from '@/game/sim/types';
+import { BTN, DT, type GameEvent, type PlayerInput, type PlayerState } from '@/game/sim/types';
 import { eyeHeight, MOVE } from '@/game/sim/movement';
 import { currentSpread, recoilKick } from '@/game/sim/weaponLogic';
 import { SURFACES, OPAQUE } from '@/game/world/collision';
-import { MapView } from './MapView';
+import { MapView, hashSeed } from './MapView';
 import { Viewmodel } from './Viewmodel';
 import type { RenderPlayer } from './renderPlayer';
 import { SoldierView } from './soldier/SoldierView';
@@ -25,6 +25,7 @@ import { gradeOptions } from './lighting/grading';
 import { bakeReflectionProbe } from './ReflectionProbe';
 import { Hud, type ScoreRow } from '@/ui/hud/Hud';
 import { DEG, clamp, damp, wrapAngle } from '@/shared/math';
+import type { MapId } from '@/data/maps';
 
 export interface MatchSummary {
   winner: -1 | 0 | 1;
@@ -34,6 +35,8 @@ export interface MatchSummary {
   local: PlayerState | null;
   rounds: number;
   playlist: string;
+  /** Map id the match was played on. */
+  map: MapId;
   matchId?: string;
   /** Human players who took part (excluding bots). */
   humans: number;
@@ -151,6 +154,8 @@ export class MatchView {
     this.scene.fog = new THREE.FogExp2(s.map.fog?.color ?? 0x0b0f14, this.baseFog);
     this.mapView = new MapView(s.map, o.assets.materials, q, { activeTags: s.rules.mapTags, world: s.world });
     this.scene.add(this.mapView.root);
+    // the same lightning for everyone in the match: seeded by the match, timed by the sim clock
+    this.mapView.weather?.setLightningSeed(hashSeed(s.matchId ?? s.map.id));
     this.effects = new Effects({ particleScale: q.particleScale, decalLimit: q.decalLimit });
     this.scene.add(this.effects.group);
     this.flashlights = new Flashlights({ shadowSize: q.spotShadowSize, shadows: q.shadows, remoteLights: q.level === 'low' ? 1 : 2 });
@@ -267,7 +272,7 @@ export class MatchView {
     this.updateCharacters(dt, local);
     this.updateViewmodel(dt, local);
     this.updateGrenades();
-    this.mapView.update(this.camera, this.time, dt);
+    this.mapView.update(this.camera, this.time, dt, this.o.session.tick * DT);
     this.effects.update(dt);
     this.updateHud(dt, local);
     this.updateAudio(dt);
@@ -332,6 +337,7 @@ export class MatchView {
       local,
       rounds: s.round.round,
       playlist: s.playlistId,
+      map: s.map.id as MapId,
       matchId: s.matchId,
       humans: s.players.filter((p) => !p.bot).length,
     };

@@ -69,6 +69,10 @@ Pages hosting.
 > Alternative to pasting rules: `npx firebase-tools login`, copy `.firebaserc.example` to
 > `.firebaserc` with your project id, then `npx firebase-tools deploy --only firestore:rules,database`.
 
+> **Updating from an earlier version:** the map select added a validated `map` field to parties and
+> matchmaking tickets in `database.rules.json`. Publish the Realtime Database rules again to get
+> that validation; the game also works with the older rules (they accept the field unchecked).
+
 ## 6. Add the config to GitHub (repository secrets)
 
 The build reads the config from environment variables; nothing is committed.

@@ -2,6 +2,8 @@
 
 LOCKDOWN is a fast, round-based, small-arena multiplayer shooter that runs in the browser.
 Two teams (1v1 up to 4v4+) fight in **Sublevel 9**, a flooded prison-bunker shower block.
+*(Original plan. The upgrade rebuilt Sublevel 9 on three levels and added a second map, Monsoon,
+with a map select; see [UPGRADE_PLAN.md](UPGRADE_PLAN.md) and the map docs in [docs/maps/](docs/maps/).)*
 The last team standing wins the round. If the clock runs out, a capture point opens over the
 central drain and the first team to take it wins.
 
@@ -127,6 +129,10 @@ humans, or 45 s alone) it opens a room, claims the chosen tickets with a transac
 by code automatically; the host starts when everyone is in or after 20 s, filling gaps with bots.
 
 ## 6. Map: Sublevel 9 (50 m × 34 m, mirrored on X)
+
+> Superseded: this is the first version of the map. The current Sublevel 9 (72 m × 48 m on three
+> levels) and Monsoon are described in [docs/maps/sublevel9.md](docs/maps/sublevel9.md) and
+> [docs/maps/monsoon.md](docs/maps/monsoon.md).
 
 ```
  z=+17 ┌──────────┬───────────────────────────────────────────┬──────────┐

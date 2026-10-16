@@ -2,6 +2,7 @@ import { signal } from '@preact/signals';
 import type { MatchSummary } from '@/game/view/MatchView';
 import { DEFAULT_LOADOUT, levelForXp, sanitizeLoadout, type Loadout } from '@/data/progression';
 import type { PlaylistId } from '@/data/playlists';
+import { isMapChoice, type MapChoice } from '@/data/maps';
 
 // Global UI state (signals) and the local profile used when Firebase isn't configured
 // or the player is a guest.
@@ -84,7 +85,19 @@ export const paused = signal(false);
 export const profile = signal<Profile>(loadLocalProfile());
 export const lastSummary = signal<MatchSummary | null>(null);
 export const selectedPlaylist = signal<PlaylistId>('1v1');
+const MAP_KEY = 'lockdown.map.v1';
+/** The map (or Random) the next match is played on: ?map=<id> wins, then the last choice. */
+export const selectedMap = signal<MapChoice>(initialMap());
+selectedMap.subscribe((m) => {
+  try {
+    localStorage.setItem(MAP_KEY, m);
+  } catch {
+    // private mode: the choice just isn't remembered
+  }
+});
 export const loading = signal<{ progress: number; label: string }>({ progress: 0, label: 'Starting' });
+/** Name of the map a match is being built on (the deploy screen shows while it builds). */
+export const deploying = signal<string | null>(null);
 
 export interface Toast {
   id: number;
@@ -147,3 +160,16 @@ export async function updateLoadout(l: Loadout): Promise<void> {
   if (loadoutSaver) await loadoutSaver(clean);
   else saveLocalProfile(profile.value);
 }
+
+function initialMap(): MapChoice {
+  const q = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('map') : null;
+  if (isMapChoice(q)) return q;
+  try {
+    const saved = localStorage.getItem(MAP_KEY);
+    if (isMapChoice(saved)) return saved;
+  } catch {
+    // no storage
+  }
+  return 'sublevel9';
+}
+

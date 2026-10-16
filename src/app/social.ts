@@ -1,5 +1,6 @@
 import { signal } from '@preact/signals';
 import type { PlaylistId } from '@/data/playlists';
+import type { MapChoice } from '@/data/maps';
 import type { ChatLine } from '@/net/protocol';
 
 // UI-facing state for accounts, friends, parties and matchmaking. The Firebase backend
@@ -45,6 +46,8 @@ export interface PartyView {
   members: PartyMember[];
   state: 'idle' | 'queue' | 'room';
   playlist: PlaylistId;
+  /** The leader's map pick (members see it; the room the leader opens uses it). */
+  map: MapChoice;
   room?: string;
 }
 export const party = signal<PartyView | null>(null);
@@ -75,6 +78,7 @@ export interface SocialApi {
   kickFromParty(uid: string): Promise<void>;
   sendPartyChat(text: string): Promise<void>;
   setPartyPlaylist(id: PlaylistId): Promise<void>;
+  setPartyMap(choice: MapChoice): Promise<void>;
   findMatch(playlist: PlaylistId): Promise<void>;
   cancelMatchmaking(): Promise<void>;
 }

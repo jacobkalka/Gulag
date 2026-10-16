@@ -149,13 +149,13 @@ Status: ☐ open, ☑ done (verified by running it), ◐ partial (see notes).
 | 1C Break up repetition: macro variation, detail blending, vertex grime, decals, edge wear | 2 | ◐ macro variation + PBR decal atlas; edge wear open |
 | 1C Wet surfaces look wet; snow looks like snow | 2, 7 | ☑ wet floors (M2); Map 2 soaked by rain except under roofs (M6); snow dropped with Map 3 (user) |
 | 1C `npm run audit:textures`, zero unexplained hits | 2 | ☑ |
-| 1C KTX2/Basis textures, meshopt models, under 400 MB, lazy-load per map | 3, 8 | ☐ |
+| 1C KTX2/Basis textures, meshopt models, under 400 MB, lazy-load per map | 3, 8 | ◐ soldiers are meshopt + quantized + WebP (8 MB); every other texture, map and sound is generated at load, so the site is 11 MB; KTX2 not used (no `toktx` here, and WebP covers the soldiers' few textures); maps build on demand at match start |
 | 1D Upgraded models with more detail, damage, wear | 2, 5-7 | ☐ |
 | 1D 3-5 variants of common props | 2 | ☑ crate x5, case x3, drum (dented/open), bench x2 |
 | 1D Seeded scatter (same for all players), clear movement lanes, matching collision proxies | 2, 5 | ☑ seeded decals + wall-base clutter; Map 2's ~1,900 plants are seeded and mirrored, kept off walkways, with trunk colliders and foliage that hides (M6) |
 | 1E ACES, GTAO, high-threshold bloom, grain, vignette, optional CA/MB off in ADS | 1, 2 | ☑ |
 | 1E Light shafts, local fog, dust, steam, embers, per-map weather | 2, 6, 7 | ☑ shafts, haze, dust (Map 1); rain, lightning, storm sky, fireflies, per-map fog (Map 2); snow dropped with Map 3 (user) |
-| 1E Low/Medium/High/Ultra scaling of every new effect, 60 FPS Medium target | 2, 8 | ◐ presets scale every new effect; FPS measured in M8 |
+| 1E Low/Medium/High/Ultra scaling of every new effect, 60 FPS Medium target | 2, 8 | ◐ presets scale every new effect (shadows, foliage, rain, particles); real-GPU frame rates can't be measured here (software renderer), counts per map in docs/perf.md |
 | 1F S-curve contrast, deep but not clipped blacks, high key-to-fill | 2 | ☑ |
 | 1F Per-map grading (LUT or grading pass) with temperature contrast | 2, 6, 7 | ☑ both maps graded (Monsoon: muted greens, cool shadows, warm lanterns) |
 | 1F Eye adaptation, disabled while scoped | 2 | ☑ |
@@ -168,7 +168,7 @@ Status: ☐ open, ☑ done (verified by running it), ◐ partial (see notes).
 | 1F Layered depth, light guiding routes and objectives | 2, 5-7 | ◐ map reworks M5-7 |
 | 1F Clamped glow; glow drops in ADS; HUD always readable | 1, 2 | ☑ |
 | 1F Settings: Glow/Bloom, Contrast, Visual Style (Cinematic default) | 2 | ☑ |
-| 1F `npm run audit:contrast` with histograms from fixed cameras on each map | 2, 8 | ◐ passes on Map 1 (9/9); Map 2 has its own night limits, full run still to do (see M6 log) |
+| 1F `npm run audit:contrast` with histograms from fixed cameras on each map | 2, 8 | ◐ Map 1 passes 9/9; Map 2 (night limits) passes 7 of 8 cameras run: the swamp view is 54.5% near-black against a 50% limit |
 
 ### Section 2 – Maps
 | Item | M | Status |
@@ -182,7 +182,7 @@ Status: ☐ open, ☑ done (verified by running it), ◐ partial (see notes).
 | 2A Spatial structure for collision and raycasts | 5 | ☑ uniform 2 m grid broadphase (raycasts walk it with DDA); nav for the big map builds in about 0.3 s |
 | 2A Navmesh per map; bots path, use cover, peek, flank, never stuck | 5-7 | ◐ Map 1: multi-level nav grid (see decisions), five routes per round, re-plan after falls, 0 stuck in soak; Map 2: the same grid on terrain, foliage blocks bots' sight |
 | 2A Headless bot-vs-bot sims per map (stuck spots, unreachable areas, ~50/50 sides) | 5-7 | ◐ `npm run botsim`; results in docs/maps/sublevel9-botsim.md and docs/maps/monsoon-botsim.md (48%/52%) |
-| 2A Map select (leader picks or Random), preview and description, synced via party and matchmaking | 8 | ☐ |
+| 2A Map select (leader picks or Random), preview and description, synced via party and matchmaking | 8 | ☑ map cards with previews in the lobby and the room; the host's pick reaches everyone in the room, the party leader's pick goes with the party, matchmaking picks among the players' choices (weighted by party size); Random resolves from the match seed |
 | 2A `docs/maps/<name>.md` design docs | 5-7 | ◐ docs/maps/sublevel9.md, docs/maps/monsoon.md |
 | 2B Map 1: bigger, multi-level bunker, flooded section, catwalks, drainage, boiler room, irregular yet fair | 5 | ☑ |
 | 2C Map 2: tropical jungle base at night in rain (see the user's references: buttress trees with vines, tree ferns, palms, fern carpet, boardwalks) | 6 | ☑ Monsoon (docs/maps/monsoon.md) |
@@ -263,15 +263,15 @@ Status: ☐ open, ☑ done (verified by running it), ◐ partial (see notes).
 ### Sections 9-11 – Networking, performance, testing
 | Item | M | Status |
 |---|---|---|
-| Host syncs map, skin assignment, scatter seed, weather seed, round state | 3, 8 | ☐ |
-| Multi-tab Playwright per map: join, round, win/lose, XP, back to lobby, party intact | 8 | ☐ |
-| Compact snapshots, only what changed | 8 | ☐ |
+| Host syncs map, skin assignment, scatter seed, weather seed, round state | 3, 8 | ☑ the map id rides the start message; lightning is seeded by the match and timed by the shared sim tick; skin team and round state are in every snapshot; scatter is seeded per map, identical everywhere |
+| Multi-tab Playwright per map: join, round, win/lose, XP, back to lobby, party intact | 8 | ☑ Sublevel 9: join, chat, networked round, leave; Monsoon: the host's map pick synced, a full match to the results, XP, both back in the room; online (emulators): accounts, friends, party, room, match, XP claims, matchmaking |
+| Compact snapshots, only what changed | 8 | ◐ binary snapshots, 557 bytes for a full 4v4 (16 KB/s per client); delta encoding not done, not needed at this size |
 | Instancing, LOD/impostors, culling, shared materials, shadow budget | 2, 6-8 | ◐ instanced decals, merged clutter, shadow budget; Map 2 plants as BatchedMeshes with per-plant culling, ground cover culled by distance, trees shadowed by the moon only; LOD/impostors open |
-| Per-map lazy loading with branded progress bar | 8 | ☐ |
+| Per-map lazy loading with branded progress bar | 8 | ◐ maps are code (nothing to download per map); each is built on demand at match start behind a branded deploy screen |
 | `?perf` overlay (FPS, frame time, draw calls, triangles, shadow lights, memory) | 2 | ☑ |
-| `docs/perf.md` per map | 8 | ☐ |
+| `docs/perf.md` per map | 8 | ☑ draw calls, triangles, lights, memory and build time per map and quality (`npm run perf:report`) |
 | Fixed-camera before/after screenshots per map | 0, 2, 5-9 | ◐ Map 1 before (M0) and after (M2, M5); Map 2 fixed cameras (M6) |
-| Audits, balance, bot sims, typecheck/lint/unit tests (regen, damage, TTK, input-mode multipliers, team skins) | 1-8 | ◐ 3 audits, balance, scatter/flashlight tests; bot sims + skin tests later |
+| Audits, balance, bot sims, typecheck/lint/unit tests (regen, damage, TTK, input-mode multipliers, team skins) | 1-8 | ☑ shadow/texture audits on both maps, contrast audit with per-map limits (one Monsoon view over), balance table, bot sims per map, unit tests (map sync, roof mask, terrain, plants, netplay) and security-rules tests |
 | ADS scoped screenshots (sniper and AR) while firing | 1 | ☑ |
 | Touchpad mode end-to-end test | 1 | ☑ |
 
@@ -451,3 +451,33 @@ Status: ☐ open, ☑ done (verified by running it), ◐ partial (see notes).
     offline 4v4 practice match on Monsoon plays rounds with bots and no errors.
 - **M7** Map 3 (snow base): skipped at the user's request ("Scrap map 3 for now ... skip the
   production of map 3 and go on to the next steps and finish").
+- **M8** Map select, sync, tests and performance.
+  - Map select: cards with a preview for each map plus Random, in the lobby and in the room panel.
+    - The host's pick is part of the room state, and the start message carries the map id, so
+      clients build the same map. A client that doesn't know the map is told to refresh
+      (protocol version 4). Random resolves from the match seed.
+    - The party leader's pick goes with the party (members see it). Matchmaking tickets carry
+      each player's pick and the coordinator picks among them, weighted by party size.
+    - The database rules validate the new `map` fields (rules tests added); the older published
+      rules accept them too.
+  - Labels that always said Sublevel 9 now name the map (lobby footer, results, loading screen).
+  - Lightning is seeded by the match and timed by the shared simulation clock, so everyone in a
+    match sees the same flashes.
+  - Matches now build behind a branded deploy screen instead of freezing the menu for the
+    seconds the map takes (tests and scripts wait for the built view now).
+  - Tests:
+    - unit: the room's map pick reaching the client, Random agreeing everywhere, the matchmaking
+      pick;
+    - e2e: a new two-tab match on Monsoon (map pick synced, full match to the results, XP, both
+      back in the room); the two-tab round, touchpad and online tests (against the emulators:
+      accounts, friends, party, room, match, XP claims, matchmaking) all pass.
+  - Balance: the weapon time-to-kill table is unchanged since M1; bot sims split the sides
+    54/46 on Sublevel 9 and 48/52 on Monsoon.
+  - Performance report: [`docs/perf.md`](docs/perf.md) (draw calls, triangles, lights, memory and
+    build time per map and quality, `npm run perf:report`). A full 4v4 snapshot is 557 bytes
+    (16 KB/s per client), so delta encoding was left out.
+  - Contrast audit on Monsoon (night limits): 7 of 8 cameras pass; the swamp view is 54.5%
+    near-black against the 50% limit (the run was stopped before the last camera).
+  - Not done: KTX2 (no encoder here; the soldiers use WebP and everything else is generated),
+    real-GPU frame rates (software renderer only).
+

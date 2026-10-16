@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildSublevel9 } from '@/game/world/sublevel9';
+import { pickMatchMap, resolveMapChoice, type MapId } from '@/data/maps';
+import { buildMap } from '@/game/world/maps';
 import { CollisionWorld } from '@/game/world/collision';
 import { PLAYLISTS } from '@/data/playlists';
 import { DEFAULT_LOADOUT } from '@/data/progression';
@@ -17,6 +19,10 @@ import { PROTOCOL_VERSION, encodeInputs } from '../protocol';
 
 const map = buildSublevel9();
 const world1v1 = CollisionWorld.fromMap(map, PLAYLISTS['1v1'].rules.mapTags);
+const getMap = (id: MapId) => {
+  if (id !== 'sublevel9') throw new Error(`test only builds sublevel9, not ${id}`);
+  return map;
+};
 
 const GOOD: NetConditions = { latency: 50, jitter: 12, loss: 0.05 };
 /** Intake A, south end: nothing in the way for 14 m north and 3 m to either side. */
@@ -40,7 +46,8 @@ function setup(cond: NetConditions, fillBots = false, seed = 3): Ctx {
   const host = new NetHost({
     code: 'TEST42',
     self: { pid: 'host', name: 'Host', level: 5, loadout: DEFAULT_LOADOUT },
-    map,
+    map: 'sublevel9',
+    getMap,
     playlist: '1v1',
     difficulty: 'regular',
     now,
@@ -48,7 +55,7 @@ function setup(cond: NetConditions, fillBots = false, seed = 3): Ctx {
   host.setFillBots(fillBots);
   const [hostSide, clientSide] = LoopbackLink.pair(net, 'host', 'c1', cond);
   host.acceptLink(hostSide);
-  const client = new NetClient(clientSide, { map, pid: 'c1', name: 'Client', level: 3, loadout: DEFAULT_LOADOUT, now, world: world1v1 });
+  const client = new NetClient(clientSide, { getMap, pid: 'c1', name: 'Client', level: 3, loadout: DEFAULT_LOADOUT, now, world: world1v1 });
   net.advance(400);
   expect(host.room.members).toHaveLength(2);
   expect(client.room?.members).toHaveLength(2);
@@ -295,7 +302,7 @@ describe('netplay over a simulated network', () => {
 
   it('rejects clients running a different protocol version', () => {
     const net = new SimNetwork(1);
-    const host = new NetHost({ code: 'ABCDEF', self: { pid: 'h', name: 'H', level: 1, loadout: DEFAULT_LOADOUT }, map, playlist: '2v2', difficulty: 'recruit', now: () => net.now });
+    const host = new NetHost({ code: 'ABCDEF', self: { pid: 'h', name: 'H', level: 1, loadout: DEFAULT_LOADOUT }, map: 'sublevel9', getMap, playlist: '2v2', difficulty: 'recruit', now: () => net.now });
     const [a, b] = LoopbackLink.pair(net, 'h', 'x', { latency: 10, jitter: 0, loss: 0 });
     host.acceptLink(a);
     const got: unknown[] = [];
@@ -304,5 +311,60 @@ describe('netplay over a simulated network', () => {
     net.advance(100);
     expect(got).toEqual([{ t: 'reject', reason: expect.stringContaining('VERSION') }]);
     expect(host.room.members).toHaveLength(1);
+  });
+});
+
+describe('map choice over the network', () => {
+  const both = new Map<string, ReturnType<typeof buildMap>>();
+  const getBoth = (id: MapId) => {
+    let m = both.get(id);
+    if (!m) both.set(id, (m = buildMap(id)));
+    return m;
+  };
+
+  it("mirrors the host's pick in the room and builds the resolved map on the client", () => {
+    const net = new SimNetwork(9);
+    const now = () => net.now;
+    const host = new NetHost({ code: 'MAPS42', self: { pid: 'host', name: 'Host', level: 5, loadout: DEFAULT_LOADOUT }, map: 'sublevel9', getMap: getBoth, playlist: '1v1', difficulty: 'regular', now });
+    const [hostSide, clientSide] = LoopbackLink.pair(net, 'host', 'c1', { latency: 30, jitter: 5, loss: 0 });
+    host.acceptLink(hostSide);
+    const client = new NetClient(clientSide, { getMap: getBoth, pid: 'c1', name: 'Client', level: 3, loadout: DEFAULT_LOADOUT, now });
+    net.advance(300);
+    host.setMap('monsoon');
+    net.advance(200);
+    expect(client.room?.map).toBe('monsoon');
+    host.setMap('random');
+    net.advance(200);
+    expect(client.room?.map).toBe('random');
+    const seed = 0x5eed;
+    const hs = host.startMatch(seed);
+    net.advance(400);
+    const want = resolveMapChoice('random', seed);
+    expect(hs.map.id).toBe(want);
+    expect(host.match?.map).toBe(want);
+    expect(client.session?.map.id).toBe(want);
+    // no map changes once the match is running
+    host.setMap('sublevel9');
+    expect(host.room.map).toBe('random');
+  });
+});
+
+describe('map selection helpers', () => {
+  it('resolves Random from the seed, the same everywhere', () => {
+    expect(resolveMapChoice('monsoon', 7)).toBe('monsoon');
+    const picks = new Set<string>();
+    for (let s = 0; s < 8; s++) {
+      expect(resolveMapChoice('random', s)).toBe(resolveMapChoice('random', s));
+      picks.add(resolveMapChoice('random', s));
+    }
+    expect([...picks].sort()).toEqual(['monsoon', 'sublevel9']);
+  });
+
+  it("picks a matchmade room's map from the players' picks, weighted by party size", () => {
+    expect(pickMatchMap([{ size: 1 }, { size: 2, map: 'random' }], 0.3)).toBe('random');
+    expect(pickMatchMap([{ size: 1, map: 'monsoon' }, { size: 1, map: 'nope' }], 0.99)).toBe('monsoon');
+    const t = [{ size: 3, map: 'monsoon' }, { size: 1, map: 'sublevel9' }];
+    expect(pickMatchMap(t, 0.5)).toBe('monsoon');
+    expect(pickMatchMap(t, 0.8)).toBe('sublevel9');
   });
 });

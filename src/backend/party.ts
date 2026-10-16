@@ -15,13 +15,14 @@ import {
 } from 'firebase/database';
 import type { PlaylistId } from '@/data/playlists';
 import { party, partyChat, type PartyView, type PresenceState } from '@/app/social';
-import { profile, pushToast, selectedPlaylist } from '@/app/state';
+import { profile, pushToast, selectedMap, selectedPlaylist } from '@/app/state';
+import { isMapChoice, type MapChoice } from '@/data/maps';
 import { doc, getDoc } from 'firebase/firestore';
 import { levelForXp } from '@/data/progression';
 import type { Fb } from './firebase';
 
 // Parties live in the Realtime Database (ephemeral, presence-aware):
-//   /parties/{pid}    leader, state, playlist, room code, four seats, members
+//   /parties/{pid}    leader, state, playlist, map, room code, four seats, members
 //   /invites/{to}/{from}
 //   /partyChat/{pid}/{push}
 // When the leader opens a room (private or matchmade) the code is published on the party
@@ -33,6 +34,7 @@ interface PartyDoc {
   leader: string;
   state: 'idle' | 'queue' | 'room';
   playlist: PlaylistId;
+  map?: string;
   room?: string;
   seats?: Record<string, string>;
   members?: Record<string, { name: string; seat: string; ts: number }>;
@@ -106,6 +108,7 @@ export class PartyService {
       leader: this.uid,
       state: 'idle',
       playlist: selectedPlaylist.value,
+      map: selectedMap.value,
       ts: serverTimestamp(),
       seats: { s0: this.uid },
       members: { [this.uid]: { name: profile.value.username.slice(0, 16), seat: 's0', ts: serverTimestamp() } },
@@ -182,6 +185,10 @@ export class PartyService {
 
   async setPlaylist(id: PlaylistId): Promise<void> {
     if (this.pid && this.isLeader) await update(ref(this.fb.rtdb, `parties/${this.pid}`), { playlist: id });
+  }
+
+  async setMap(choice: MapChoice): Promise<void> {
+    if (this.pid && this.isLeader) await update(ref(this.fb.rtdb, `parties/${this.pid}`), { map: choice });
   }
 
   /** Leader: publish the room everyone should be in (or clear it). */
@@ -265,6 +272,7 @@ export class PartyService {
       leader: d.leader,
       state: d.state,
       playlist: d.playlist,
+      map: isMapChoice(d.map) ? d.map : 'sublevel9',
       room: d.room,
       members: Object.entries(d.members ?? {})
         .map(([uid, m]) => ({

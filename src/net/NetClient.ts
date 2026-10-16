@@ -1,4 +1,5 @@
 import type { MapDef } from '@/game/world/mapTypes';
+import type { MapId } from '@/data/maps';
 import type { Loadout } from '@/data/progression';
 import { ClientSession } from '@/game/session/ClientSession';
 import type { CollisionWorld } from '@/game/world/collision';
@@ -10,7 +11,8 @@ import { MSG, PROTOCOL_VERSION, decodeSnapshot, encodePing, type ChatLine, type 
 // message into a ClientSession that the match view drives.
 
 export interface NetClientOptions {
-  map: MapDef;
+  /** Builds (or returns the cached) map the host picked for a match. */
+  getMap: (id: MapId) => MapDef;
   pid: string;
   name: string;
   level: number;
@@ -18,7 +20,7 @@ export interface NetClientOptions {
   /** Declared touchpad input mode. */
   touchpad?: boolean;
   now?: () => number;
-  /** Shared collision world (built once per map). */
+  /** Prebuilt collision world for the match's map (tests); built from the map when absent. */
   world?: CollisionWorld;
 }
 
@@ -119,8 +121,17 @@ export class NetClient {
         break;
       case 'start': {
         if (this.session && this.session.matchId === m.match.matchId) break;
+        let map: MapDef;
+        try {
+          map = this.o.getMap(m.match.map);
+        } catch {
+          // a map this build doesn't know: the host runs a newer version
+          this.closedReason = 'UNKNOWN MAP: REFRESH THE PAGE TO UPDATE';
+          this.link.close(this.closedReason);
+          break;
+        }
         this.session = new ClientSession({
-          map: this.o.map,
+          map,
           start: m.match,
           localPid: this.o.pid,
           sendU: (d) => this.link.sendU(d),

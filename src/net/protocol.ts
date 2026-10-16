@@ -4,6 +4,7 @@ import type { Loadout } from '@/data/progression';
 import type { BotDifficulty } from '@/game/bots/BotBrain';
 import type { GameEvent, GrenadeState, PlayerInput, PlayerState, PlayerStats, RoundPhase, RoundState } from '@/game/sim/types';
 import { ByteReader, ByteWriter } from './codec';
+import type { MapChoice, MapId } from '@/data/maps';
 
 // Wire protocol between the host (authoritative simulation) and clients.
 //
@@ -13,7 +14,7 @@ import { ByteReader, ByteWriter } from './codec';
 //   both            PING/PONG round-trip measurement
 // Reliable, ordered channel ('r'), JSON: room lobby, match start, game events, roster, chat.
 
-export const PROTOCOL_VERSION = 3;
+export const PROTOCOL_VERSION = 4;
 
 export const MSG = { INPUT: 1, SNAPSHOT: 2, PING: 3, PONG: 4 } as const;
 
@@ -322,6 +323,8 @@ export interface RoomMember {
 export interface RoomState {
   code: string;
   playlist: PlaylistId;
+  /** The host's map pick (or Random, resolved when the match starts). */
+  map: MapChoice;
   fillBots: boolean;
   difficulty: BotDifficulty;
   phase: 'lobby' | 'match';
@@ -343,6 +346,8 @@ export interface MatchPlayerInfo {
 export interface MatchStart {
   matchId: string;
   playlist: PlaylistId;
+  /** The map this match is played on (every client builds it from the id). */
+  map: MapId;
   seed: number;
   tick: number;
   players: MatchPlayerInfo[];

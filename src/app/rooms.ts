@@ -1,6 +1,7 @@
 import { signal } from '@preact/signals';
 import type { GameController } from './GameController';
-import { profile, pushToast, screen, selectedPlaylist } from './state';
+import { profile, pushToast, screen, selectedMap, selectedPlaylist } from './state';
+import type { MapChoice } from '@/data/maps';
 import { settings } from './settings';
 import { levelForXp } from '@/data/progression';
 import { PLAYLISTS, type PlaylistId } from '@/data/playlists';
@@ -41,6 +42,8 @@ export function onlineRoomsAvailable(): boolean {
 export interface CreateRoomOptions {
   code?: string;
   playlist?: PlaylistId;
+  /** Defaults to the player's map pick. */
+  map?: MapChoice;
   fillBots?: boolean;
   /** Matchmade room: expected players (uid -> team); auto-starts when all joined or on timeout. */
   expect?: { teams: Map<string, 0 | 1>; timeoutMs: number };
@@ -95,7 +98,14 @@ export class RoomController {
         }
       }
       if (!code) throw new Error('Could not reserve a room code');
-      const host = new NetHost({ code, self: { pid: sig.selfId, ...me }, map: this.game.map, playlist, difficulty: settings.value.botDifficulty });
+      const host = new NetHost({
+        code,
+        self: { pid: sig.selfId, ...me },
+        map: opts.map ?? selectedMap.value,
+        getMap: (id) => this.game.mapFor(id),
+        playlist,
+        difficulty: settings.value.botDifficulty,
+      });
       const s = sig;
       host.onRoom = (room) => {
         this.updateRoom(room);
@@ -163,13 +173,14 @@ export class RoomController {
       roomBusy.value = 'CONNECTING';
       const link = await connectToHost(sig, info.hostId);
       const me = this.me();
-      const client = new NetClient(link, { map: this.game.map, pid: sig.selfId, ...me });
+      const client = new NetClient(link, { getMap: (id) => this.game.mapFor(id), pid: sig.selfId, ...me });
       this.signaling = sig;
       this.client = client;
       this.leaving = false;
       roomView.value = {
         role: 'client',
-        room: { code, playlist: info.playlist as PlaylistId, fillBots: true, difficulty: 'regular', phase: 'lobby', members: [] },
+        // placeholder until the host's room state arrives
+        room: { code, playlist: info.playlist as PlaylistId, map: 'random', fillBots: true, difficulty: 'regular', phase: 'lobby', members: [] },
         selfPid: sig.selfId,
         chat: [],
         mode: sig.kind,
@@ -271,6 +282,9 @@ export class RoomController {
   }
   setFillBots(on: boolean): void {
     this.host?.setFillBots(on);
+  }
+  setMap(choice: MapChoice): void {
+    this.host?.setMap(choice);
   }
   setDifficulty(d: BotDifficulty): void {
     this.host?.setDifficulty(d);

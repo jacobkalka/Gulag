@@ -81,6 +81,13 @@ describe('parties, invites and party chat', () => {
     await assertSucceeds(update(ref(rtdb('alice'), 'parties/p1'), { 'members/carol': null, 'seats/s2': null })); // leader kicks
     await assertFails(join('bob', 's1', 'nope')); // no such party
   });
+  it('the leader picks a known map (or random), members cannot', async () => {
+    await seed('parties/p1', { ...party('alice'), seats: { s0: 'alice', s1: 'bob' }, members: { alice: { name: 'alice', seat: 's0', ts: now() }, bob: { name: 'bob', seat: 's1', ts: now() } } });
+    await assertSucceeds(update(ref(rtdb('alice'), 'parties/p1'), { map: 'monsoon' }));
+    await assertSucceeds(update(ref(rtdb('alice'), 'parties/p1'), { map: 'random' }));
+    await assertFails(update(ref(rtdb('alice'), 'parties/p1'), { map: 'atlantis' }));
+    await assertFails(update(ref(rtdb('bob'), 'parties/p1'), { map: 'sublevel9' }));
+  });
   it('invites and chat', async () => {
     await seed('parties/p1', party('alice'));
     await assertSucceeds(set(ref(rtdb('alice'), 'invites/bob/alice'), { party: 'p1', fromName: 'alice', ts: now() }));
@@ -107,5 +114,7 @@ describe('matchmaking queue', () => {
     await assertFails(set(ref(rtdb('alice'), 'queue/2v2/bob/assign'), { ...assign, room: 'XYZ234' })); // already assigned
     await assertSucceeds(remove(ref(rtdb('bob'), 'queue/2v2/bob')));
     await assertFails(set(ref(rtdb('carol'), 'queue/9v9/carol'), ticket()));
+    await assertSucceeds(set(ref(rtdb('carol'), 'queue/2v2/carol'), { ...ticket(), map: 'monsoon' }));
+    await assertFails(set(ref(rtdb('dave'), 'queue/2v2/dave'), { ...ticket(), map: '<script>' }));
   });
 });

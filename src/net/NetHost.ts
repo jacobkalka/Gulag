@@ -1,4 +1,5 @@
 import type { MapDef } from '@/game/world/mapTypes';
+import { resolveMapChoice, type MapChoice, type MapId } from '@/data/maps';
 import { PLAYLISTS, type PlaylistId } from '@/data/playlists';
 import { sanitizeLoadout, type Loadout } from '@/data/progression';
 import type { BotDifficulty } from '@/game/bots/BotBrain';
@@ -49,7 +50,10 @@ interface Peer {
 export interface NetHostOptions {
   code: string;
   self: { pid: string; name: string; level: number; loadout: Loadout; touchpad?: boolean };
-  map: MapDef;
+  /** The room's starting map pick. */
+  map: MapChoice;
+  /** Builds (or returns the cached) map for a match. */
+  getMap: (id: MapId) => MapDef;
   playlist: PlaylistId;
   difficulty: BotDifficulty;
   now?: () => number;
@@ -74,7 +78,7 @@ export class NetHost {
   constructor(private o: NetHostOptions) {
     this.now = o.now ?? (() => performance.now());
     this.selfLoadout = { ...o.self.loadout };
-    this.room = { code: o.code, playlist: o.playlist, fillBots: true, difficulty: o.difficulty, phase: 'lobby', members: [] };
+    this.room = { code: o.code, playlist: o.playlist, map: o.map, fillBots: true, difficulty: o.difficulty, phase: 'lobby', members: [] };
     this.refreshMembers();
   }
 
@@ -263,6 +267,12 @@ export class NetHost {
     this.broadcastRoom();
   }
 
+  setMap(choice: MapChoice): void {
+    if (this.room.phase !== 'lobby' || this.room.map === choice) return;
+    this.room.map = choice;
+    this.broadcastRoom();
+  }
+
   setDifficulty(d: BotDifficulty): void {
     this.room.difficulty = d;
     this.broadcastRoom();
@@ -317,8 +327,10 @@ export class NetHost {
     this.rebalance();
     const peers = [...this.peers.values()];
     peers.forEach((p, i) => (p.playerId = i + 1));
+    // Random resolves from the match seed; clients get the concrete map in the start message
+    const mapId = resolveMapChoice(this.room.map, seed);
     const session = new HostSession({
-      map: this.o.map,
+      map: this.o.getMap(mapId),
       playlist: this.room.playlist,
       local: { name: this.o.self.name, loadout: this.selfLoadout, team: this.selfTeam, touchpad: !!this.o.self.touchpad },
       remotes: peers.map((p) => ({ id: p.playerId, name: p.name, team: p.team, loadout: p.loadout, touchpad: p.touchpad })),
@@ -330,6 +342,7 @@ export class NetHost {
     this.match = {
       matchId: `${this.room.code}-${seed.toString(36)}`,
       playlist: this.room.playlist,
+      map: mapId,
       seed,
       tick: session.tick,
       players: [],

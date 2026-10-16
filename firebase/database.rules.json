@@ -37,6 +37,9 @@
         "playlist": {
           ".validate": "newData.isString() && newData.val().matches(/^(1v1|2v2|3v3|4v4)$/)"
         },
+        "map": {
+          ".validate": "newData.isString() && newData.val().matches(/^(sublevel9|monsoon|random)$/)"
+        },
         "room": {
           ".validate": "newData.isString() && newData.val().matches(/^[A-HJ-NP-Z2-9]{6}$/)"
         },
@@ -79,6 +82,9 @@
         "$ticket": {
           ".write": "auth != null && auth.uid === $ticket",
           ".validate": "!newData.exists() || ($playlist.matches(/^(1v1|2v2|3v3|4v4)$/) && newData.hasChildren(['size', 'names', 'ts', 'version']) && newData.child('size').isNumber() && newData.child('size').val() >= 1 && newData.child('size').val() <= 4)",
+          "map": {
+            ".validate": "newData.isString() && newData.val().matches(/^(sublevel9|monsoon|random)$/)"
+          },
           "assign": {
             ".write": "auth != null && (auth.uid === $ticket || (!data.exists() && newData.exists() && newData.child('host').val() === auth.uid && root.child('queue').child($playlist).child(auth.uid).exists()))",
             ".validate": "!newData.exists() || (newData.hasChildren(['host', 'room', 'team', 'ts']) && newData.child('room').isString() && newData.child('room').val().matches(/^[A-HJ-NP-Z2-9]{6}$/) && (newData.child('team').val() === 0 || newData.child('team').val() === 1))"

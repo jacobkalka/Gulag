@@ -7,6 +7,7 @@ import { WEAPON_MAP } from '@/data/weapons';
 import { audio } from '@/engine/audio/AudioEngine';
 import { settings, teamColors } from '@/app/settings';
 import { Button, Bar } from '../components';
+import { mapChoiceName } from '@/data/maps';
 
 /** End-of-match screen: result, scoreboard with per-player stats, XP breakdown, level-ups and unlocks. */
 export function Results(props: {
@@ -58,7 +59,7 @@ export function Results(props: {
           <span style={{ color: colors.enemy }}>{summary.score[summary.localTeam === 0 ? 1 : 0]}</span>
         </div>
         <div class="res-sub">
-          {summary.playlist.toUpperCase()} · SUBLEVEL 9 · {summary.rounds} ROUNDS
+          {summary.playlist.toUpperCase()} · {mapChoiceName(summary.map).toUpperCase()} · {summary.rounds} ROUNDS
         </div>
       </div>
       <div class="res-body">

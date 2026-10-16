@@ -109,6 +109,7 @@ export async function initBackend(game: GameController): Promise<void> {
       kickFromParty: (uid) => partySvc.kick(uid).catch(fail('PARTY')),
       sendPartyChat: (t) => partySvc.chat(t).catch(fail('CHAT')),
       setPartyPlaylist: (id) => partySvc.setPlaylist(id).catch(fail('PARTY')),
+      setPartyMap: (m) => partySvc.setMap(m).catch(fail('PARTY')),
       findMatch: (pl) =>
         mm.find(pl).catch((e) => {
           matchmakingError(e);

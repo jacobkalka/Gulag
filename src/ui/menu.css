@@ -374,7 +374,7 @@
   cursor: pointer;
   font-family: var(--font-ui);
   transition: border-color 0.15s, transform 0.1s, background 0.15s;
-  min-height: 132px;
+  min-height: 116px;
 }
 .pl-card:hover {
   border-color: var(--line-strong);
@@ -404,6 +404,95 @@
   font-size: 13px;
   color: var(--muted);
   line-height: 1.3;
+}
+/* map cards: preview, name, one line (compact in the room panel) */
+.maps {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.map-card {
+  text-align: left;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  color: var(--text);
+  padding: 0 0 10px;
+  cursor: pointer;
+  font-family: var(--font-ui);
+  transition: border-color 0.15s, transform 0.1s, background 0.15s;
+  overflow: hidden;
+}
+.map-card:hover:not(:disabled) {
+  border-color: var(--line-strong);
+  transform: translateY(-2px);
+}
+.map-card:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+.map-card.on {
+  border-color: var(--orange);
+  box-shadow: inset 0 -4px 0 var(--orange);
+  opacity: 1;
+}
+.map-thumb {
+  aspect-ratio: 16 / 9;
+  background: linear-gradient(135deg, #1a2026, #0b0e12) center / cover no-repeat;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-bottom: 1px solid var(--line);
+}
+.map-thumb span {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 44px;
+  color: var(--muted);
+}
+.map-card.on .map-thumb span {
+  color: var(--orange);
+}
+.map-name {
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  font-size: 14px;
+  margin: 8px 10px 2px;
+}
+.map-card.on .map-name {
+  color: var(--orange);
+}
+.map-desc {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.3;
+  margin: 0 10px;
+}
+/* the play tab is short on height: a strip of the preview and two lines of text */
+.maps:not(.compact) .map-thumb {
+  aspect-ratio: auto;
+  height: 62px;
+}
+.maps:not(.compact) .map-desc {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.maps.compact .map-name {
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  margin: 6px 8px 0;
+}
+.maps.compact .map-thumb span {
+  font-size: 30px;
+}
+.party-pick {
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+}
+.party-pick b {
+  color: var(--text);
 }
 .play-actions {
   display: flex;

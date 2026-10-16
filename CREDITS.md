@@ -7,10 +7,12 @@ no third-party art, textures, sounds or music are used.
 
 | Content | How it is made | Source |
 |---|---|---|
-| Textures (concrete, tiles, plaster, painted/rusty metal, wood, fabric, gun finishes, decals) | GPU shaders at load time (noise, Voronoi, procedural normal and ORM maps) | `src/assets/textures/` |
+| Textures (concrete, tiles, plaster, painted/rusty metal, wood, fabric, gun finishes, decals, jungle floor, mud, bark, canvas, corrugated metal, sandbags) | GPU shaders at load time (noise, Voronoi, procedural normal and ORM maps) | `src/assets/textures/` |
 | Weapons (15), first-person arms, props, light fixtures | Code-modeled geometry (beveled boxes, extrusions, lathes) | `src/assets/models/`, `src/assets/geometry/` |
 | Soldier models (black-and-red, woodland camo) | Supplied by the project owner for this game (made with Tripo AI); simplified, rigged, skinned and compressed by this project's pipeline; animated in code | `public/assets/soldiers/`, `tools/soldiers/`, `src/game/view/soldier/` |
 | Map: Sublevel 9 | Hand-authored level data | `src/game/world/sublevel9.ts` |
+| Map: Monsoon, its plants and the leaf textures | Hand-authored level data and terrain; plants placed by a seeded scatter and modeled in code; leaves drawn on a canvas at load | `src/game/world/monsoon.ts`, `src/assets/models/plants.ts` |
+| Map preview images | Screenshots of the game itself | `public/maps/` |
 | Sound effects, ambience, music loops | Synthesized with the Web Audio API (OfflineAudioContext) | `src/engine/audio/` |
 | UI icons and the favicon | CSS/SVG drawn in code | `src/ui/`, `index.html` |
 

@@ -1,5 +1,7 @@
 import type { JSX } from 'preact';
-import { lobbyTab, profile, selectedPlaylist, type LobbyTab } from '@/app/state';
+import { lobbyTab, profile, selectedMap, selectedPlaylist, type LobbyTab } from '@/app/state';
+import { mapChoiceName } from '@/data/maps';
+import { MapPicker } from './MapPicker';
 import { settings, updateSettings } from '@/app/settings';
 import type { GameController } from '@/app/GameController';
 import { PLAYLISTS, PLAYLIST_ORDER } from '@/data/playlists';
@@ -58,6 +60,10 @@ export function PlayTab(props: { game: GameController }): JSX.Element {
   const pl = selectedPlaylist.value;
   const diff = settings.value.botDifficulty;
   const p = profile.value;
+  const pv = party.value;
+  const me = account.value?.uid;
+  const leader = !!pv && pv.leader === me;
+  const member = !!pv && pv.leader !== me;
   const start = () => {
     props.game.startBotMatch(pl, diff, p.loadout, p.username);
     screen.value = 'match';
@@ -83,11 +89,30 @@ export function PlayTab(props: { game: GameController }): JSX.Element {
         </Panel>
       </div>
       <div class="play-right">
+        <MapPicker
+          value={selectedMap.value}
+          onChange={(m) => {
+            selectedMap.value = m;
+            if (leader) void social.value?.setPartyMap(m);
+          }}
+        />
+        {member && pv && (
+          <div class="party-pick" data-testid="party-pick">
+            YOUR PARTY PLAYS THE LEADER'S PICK: <b>{mapChoiceName(pv.map).toUpperCase()}</b> · <b>{pv.playlist.toUpperCase()}</b>
+          </div>
+        )}
         <div class="playlists">
           {PLAYLIST_ORDER.map((id) => {
             const p2 = PLAYLISTS[id];
             return (
-              <button class={`pl-card ${pl === id ? 'on' : ''}`} data-testid={`playlist-${id}`} onClick={() => (selectedPlaylist.value = id)}>
+              <button
+                class={`pl-card ${pl === id ? 'on' : ''}`}
+                data-testid={`playlist-${id}`}
+                onClick={() => {
+                  selectedPlaylist.value = id;
+                  if (leader) void social.value?.setPartyPlaylist(id);
+                }}
+              >
                 <div class="pl-id">{id.toUpperCase()}</div>
                 <div class="pl-name">{p2.name.toUpperCase()}</div>
                 <div class="pl-desc">{p2.description}</div>
@@ -175,7 +200,9 @@ export function Lobby(props: { game: GameController }): JSX.Element {
         {tab === 'loadout' && <LoadoutTab game={props.game} onChange={() => props.game.rooms.syncLoadout()} />}
       </main>
       <footer class="lobby-foot">
-        <span>SUBLEVEL 9 · {PLAYLISTS[selectedPlaylist.value].name.toUpperCase()}</span>
+        <span>
+          {mapChoiceName(selectedMap.value).toUpperCase()} · {PLAYLISTS[selectedPlaylist.value].name.toUpperCase()}
+        </span>
         <span class="ver">BUILD {__BUILD__}</span>
       </footer>
     </div>

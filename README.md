@@ -1,10 +1,10 @@
 # LOCKDOWN
 
 **A fast, round-based arena shooter that runs in your browser.** Two teams (1v1 up to 4v4) fight
-in *Sublevel 9*, a flooded prison bunker of tiled showers, cell blocks, locker rooms and a boiler
-hall. Last team standing takes the round. If the clock runs out, a capture point opens over the
-central drain: hold it to win. Everything you see and hear (textures, weapons, operators, the map,
-every gunshot) is generated in code at load time.
+on two night maps: *Sublevel 9*, a flooded prison bunker on three levels, and *Monsoon*, a jungle
+outpost in a tropical downpour. Last team standing takes the round. If the clock runs out, a
+capture point opens: hold it to win. The maps, textures, weapons and sounds are generated in code
+at load time; the soldiers are supplied models (see [CREDITS.md](CREDITS.md)).
 
 **Play:** <https://jacobkalka.github.io/Gulag/> (live once the steps in [SETUP.md](SETUP.md) are done)
 
@@ -13,6 +13,7 @@ every gunshot) is generated in code at load time.
 | ![Lobby with party lineup](screenshots/readme/lobby.jpg) | ![Loadout with 3D preview](screenshots/readme/loadout.jpg) |
 | ![First person, Sublevel 9](screenshots/m1/hero.jpg) | ![Aiming down sights](screenshots/m1/fp-ads.jpg) |
 | ![Private room lobby](screenshots/readme/room.jpg) | ![Friends and party](screenshots/readme/social.jpg) |
+| ![Monsoon: the helipad in the rain](screenshots/upgrade-m6/monsoon-pad.png) | ![Monsoon: the jungle with a flashlight](screenshots/upgrade-m6/monsoon-match-jungle.png) |
 
 ## Features
 
@@ -23,6 +24,8 @@ every gunshot) is generated in code at load time.
   Every stat lives in [`src/data/weapons.ts`](src/data/weapons.ts).
 - Frag and flash grenades.
 - Playlists 1v1 / 2v2 / 3v3 / 4v4 (adding 5v5 is one entry in `src/data/playlists.ts`).
+- Two maps with a map select (or Random) in the lobby, in private rooms, for parties (the leader
+  picks) and in matchmaking. Design docs and bot-simulation results are in [`docs/maps/`](docs/maps/).
 - Rounds, overtime capture, sudden death, spectating teammates, kill feed, end screen with
   stats and an XP breakdown.
 - Bots that use cover, peek, hunt, take the objective and throw grenades (three difficulties).
@@ -46,6 +49,9 @@ every gunshot) is generated in code at load time.
 **Presentation**
 - three.js WebGL2 renderer with GTAO-style SSAO, bloom, ACES tone mapping, SMAA, motion blur,
   volumetric light shafts, a reflection probe for the wet floors, and dynamic lights.
+- Night lighting from real fixtures with baked bounce light, wet surfaces, a weapon flashlight.
+  Monsoon adds about 1,900 instanced plants with wind sway, rain that stops under roofs, lightning
+  and a storm sky.
 - Quality presets (Low → Ultra), resolution scale, FPS/ping overlay.
 - Positional HRTF audio synthesized at load, with separate volume sliders.
 - Accessibility: colorblind team palettes, directional captions for important sounds, reduce-motion
@@ -97,8 +103,8 @@ npm run audit:contrast   # luminance histograms from fixed cameras: flat, crushe
 ```
 
 Developer views: add `?perf` to the URL for a frame-time, draw-call, triangle, light and memory
-overlay; `#/arttest` renders the map from fixed cameras (`cam=free&pos=x,y,z&look=x,y,z` for any
-view); `#/swatches`, `#/swatches/decals` and `#/swatches/props` show every material, decal and prop
+overlay; `?map=monsoon` boots straight into a map; `#/arttest?map=<id>` renders a map from fixed
+cameras (`cam=free&pos=x,y,z&look=x,y,z` for any view); `#/swatches`, `#/swatches/decals` and `#/swatches/props` show every material, decal and prop
 variant.
 
 The architecture, protocol and data model are described in [PLAN.md](PLAN.md); the upgrade plan and
@@ -123,7 +129,8 @@ its checklist are in [UPGRADE_PLAN.md](UPGRADE_PLAN.md). Assets and licenses are
   hit just after reaching cover.
 - **Offline progress** (no Firebase configured) lives in localStorage and is not validated.
   An anonymous guest who clears browser data loses that account unless it was linked.
-- **One map** (Sublevel 9). The map format is data-driven, so more can be added.
+- **Two maps.** A third (a snowy base) was planned and dropped for now; the outdoor engine built for
+  Monsoon (terrain, foliage, weather) is where it would start.
 - **No voice chat**, no player blocking or reporting, no kill cam (spectating your killer briefly
   instead).
 - **Performance** was profiled for draw calls and triangles, but real-GPU frame rates were not

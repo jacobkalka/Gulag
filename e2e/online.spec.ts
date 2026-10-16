@@ -60,7 +60,7 @@ test('accounts, friends, party, room, networked match, XP claims, matchmaking', 
 
   // play: host starts; force a quick decisive finish after the 30 s minimum
   await a.click('[data-testid="start-match"]');
-  await expect.poll(() => b.evaluate(() => (window as unknown as W).__game.debug().session?.snapshotsReceived ?? 0), { timeout: 30_000 }).toBeGreaterThan(10);
+  await expect.poll(() => b.evaluate(() => (window as unknown as W).__game.debug().session?.snapshotsReceived ?? 0), { timeout: 60_000 }).toBeGreaterThan(10);
   await a.waitForTimeout(33_000);
   await a.evaluate(() => {
     const sim = (window as unknown as W).__game.debug().session.sim;

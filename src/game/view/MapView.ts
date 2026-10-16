@@ -29,7 +29,7 @@ export interface SkyLayer {
   readonly group: THREE.Group;
   readonly moon: THREE.SpotLight;
   setPixelScale(heightPx: number): void;
-  update(t: number, dt: number, camera: THREE.Camera): void;
+  update(t: number, dt: number, camera: THREE.Camera, simTime?: number): void;
 }
 
 interface Bucket {
@@ -519,12 +519,13 @@ export class MapView {
     }
   }
 
-  update(camera: THREE.Camera, t: number, dt: number): void {
+  /** `simTime`: the match's shared clock in seconds (keeps lightning in sync between players). */
+  update(camera: THREE.Camera, t: number, dt: number, simTime?: number): void {
     bindWetMask(this.wetMask);
     // slow drift on the standing water
     if (this.waterNormal) this.waterNormal.offset.set(t * 0.011, t * 0.007);
     this.lights.update(camera.position, t, dt, camera.getWorldDirection(this.camDir));
-    this.atmosphere.update(t, dt, camera);
+    this.atmosphere.update(t, dt, camera, simTime);
     this.plants?.update(t, camera);
   }
 }
@@ -637,7 +638,7 @@ function roofRects(map: MapDef, tags: Set<string>): RoofRect[] {
   return out;
 }
 
-function hashSeed(s: string): number {
+export function hashSeed(s: string): number {
   let h = 2166136261;
   for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
   return h >>> 0;

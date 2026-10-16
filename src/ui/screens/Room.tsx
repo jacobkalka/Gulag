@@ -6,6 +6,7 @@ import { pushToast } from '@/app/state';
 import { PLAYLISTS, PLAYLIST_ORDER, type PlaylistId } from '@/data/playlists';
 import type { RoomMember } from '@/net/protocol';
 import { Button, Panel, Segmented, Toggle } from '../components';
+import { MapPicker } from './MapPicker';
 
 /** Create / join controls shown on the Play tab when not in a room. */
 export function RoomEntry(props: { game: GameController }): JSX.Element {
@@ -166,6 +167,10 @@ export function RoomPanel(props: { game: GameController }): JSX.Element | null {
       </div>
       <div class="room-side">
         <Panel title="MATCH">
+          <div class="field">
+            <span class="field-l">MAP</span>
+          </div>
+          <MapPicker compact value={room.map} onChange={isHost ? (m) => rooms.setMap(m) : undefined} />
           {isHost ? (
             <Segmented<PlaylistId>
               label="PLAYLIST"

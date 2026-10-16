@@ -52,7 +52,7 @@ async function matchShot({ name, primary, kind }) {
   await page.$eval(`[data-testid="playlist-${kind === 'ads' ? '4v4' : '1v1'}"]`, (el) => el.click());
   // the click starts a synchronous match build; don't let Playwright wait on the busy page
   await page.$eval('[data-testid="practice"]', (el) => el.click());
-  await page.waitForFunction(() => !!window.__game?.debug().session, null, { timeout: 240000 });
+  await page.waitForFunction(() => !!window.__game?.debug().match, null, { timeout: 240000 });
   await page.waitForTimeout(800);
   await page.evaluate((aimLong) => {
     const g = window.__game;

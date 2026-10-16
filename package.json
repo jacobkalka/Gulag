@@ -19,6 +19,7 @@
     "audit:shadows": "node scripts/audit.mjs shadows",
     "audit:textures": "node scripts/audit.mjs textures",
     "audit:contrast": "node scripts/audit.mjs contrast",
+    "perf:report": "node scripts/perfreport.mjs",
     "test:rules": "npx -y firebase-tools@15.33.0 --config firebase/emulators.test.json emulators:exec --only firestore,database --project demo-lockdown \"vitest run -c vitest.rules.config.ts\"",
     "emulators": "npx -y firebase-tools@15.33.0 emulators:start --only auth,firestore,database --project demo-lockdown"
   },

@@ -1,7 +1,8 @@
 import { onDisconnect, onValue, ref, remove, runTransaction, serverTimestamp, set, type Unsubscribe } from 'firebase/database';
 import { PLAYLISTS, type PlaylistId } from '@/data/playlists';
 import { matchmaking, party } from '@/app/social';
-import { profile, pushToast } from '@/app/state';
+import { profile, pushToast, selectedMap } from '@/app/state';
+import { pickMatchMap } from '@/data/maps';
 import { roomView, type RoomController } from '@/app/rooms';
 import { PROTOCOL_VERSION, randomRoomCode } from '@/net/protocol';
 import type { Fb } from './firebase';
@@ -25,6 +26,8 @@ interface Ticket {
   ts: number;
   version: number;
   members?: Record<string, boolean>;
+  /** The ticket holder's map pick (the coordinator chooses among the picks). */
+  map?: string;
   assign?: { host: string; room: string; team: 0 | 1; ts: number };
 }
 
@@ -64,6 +67,7 @@ export class Matchmaker {
       ts: serverTimestamp(),
       version: PROTOCOL_VERSION,
       members: Object.fromEntries(members.map((u) => [u, true])),
+      map: pv ? pv.map : selectedMap.value,
     });
     await onDisconnect(r).remove();
     this.playlist = playlist;
@@ -118,7 +122,8 @@ export class Matchmaker {
     const expected = new Map<string, 0 | 1>();
     for (const { t, team } of pick) for (const u of Object.keys(t.members ?? { [t.id]: true })) expected.set(u, team);
     try {
-      await this.rooms.createRoom({ code, playlist, fillBots: true, expect: { teams: expected, timeoutMs: HOST_WAIT_MS } });
+      const map = pickMatchMap(pick.map((p) => p.t), Math.random());
+      await this.rooms.createRoom({ code, playlist, map, fillBots: true, expect: { teams: expected, timeoutMs: HOST_WAIT_MS } });
     } catch (e) {
       this.forming = false;
       console.warn('matchmade room failed', e);

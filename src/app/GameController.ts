@@ -6,11 +6,12 @@ import { Input } from '@/engine/Input';
 import { audio } from '@/engine/audio/AudioEngine';
 import { Assets } from '@/assets/Assets';
 import { activeBindings, inputSettingsOf, settings } from './settings';
-import { saveInputModePref } from './state';
+import { deploying, saveInputModePref, selectedMap } from './state';
 import { gradeOptions } from '@/game/view/lighting/grading';
 import { currentSpread } from '@/game/sim/weaponLogic';
 import { getWeapon } from '@/data/weapons';
 import { buildMap, MAP_IDS } from '@/game/world/maps';
+import { MAP_INFO, resolveMapChoice, type MapId } from '@/data/maps';
 import type { MapDef } from '@/game/world/mapTypes';
 import { HostSession } from '@/game/session/HostSession';
 import type { MatchSession } from '@/game/session/Session';
@@ -73,6 +74,15 @@ export class GameController {
   /** Every map id (audits and tests ask for this). */
   mapIds(): string[] {
     return [...MAP_IDS];
+  }
+
+  private builtMaps = new Map<string, MapDef>();
+  /** A map's data, built once per page (builders are deterministic, so host and clients agree). */
+  mapFor(id: MapId): MapDef {
+    if (this.map?.id === id) return this.map;
+    let m = this.builtMaps.get(id);
+    if (!m) this.builtMaps.set(id, (m = buildMap(id)));
+    return m;
   }
 
   constructor(readonly canvas: HTMLCanvasElement, readonly uiRoot: HTMLElement) {
@@ -355,7 +365,8 @@ export class GameController {
   }
 
   startBotMatch(playlist: PlaylistId, difficulty: BotDifficulty, loadout: Loadout, name: string): void {
-    const session = new HostSession({ map: this.map, playlist, local: { name, loadout, touchpad: settings.value.inputMode === 'touchpad' }, fillBots: true, difficulty });
+    const map = this.mapFor(resolveMapChoice(selectedMap.value, (Math.random() * 0xffffffff) >>> 0));
+    const session = new HostSession({ map, playlist, local: { name, loadout, touchpad: settings.value.inputMode === 'touchpad' }, fillBots: true, difficulty });
     session.matchId = `p${Date.now().toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`;
     this.beginMatch(session, { host: true });
   }
@@ -371,6 +382,23 @@ export class GameController {
         console.warn('match hook failed', e);
       }
     }
+    // Building the map's view takes a moment (seconds on slow machines) and blocks the page:
+    // put the deploy screen up first, then build once it has painted.
+    const token = ++this.buildToken;
+    deploying.value = MAP_INFO[session.map.id as MapId]?.name ?? session.map.name;
+    setTimeout(() => {
+      if (token !== this.buildToken) return;
+      try {
+        this.buildMatchView(session, meta);
+      } finally {
+        if (token === this.buildToken) deploying.value = null;
+      }
+    }, 50);
+  }
+
+  private buildToken = 0;
+
+  private buildMatchView(session: MatchSession, meta: MatchMeta): void {
     const mv = new MatchView({
       renderer: this.renderer,
       assets: this.assets,
@@ -397,6 +425,9 @@ export class GameController {
   }
 
   leaveMatch(restoreMenu = true): void {
+    // a match still waiting to be built is dropped
+    this.buildToken++;
+    deploying.value = null;
     if (this.match) {
       this.match.dispose();
       this.match = null;

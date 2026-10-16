@@ -122,6 +122,10 @@ export class Weather {
   private flyMat: THREE.ShaderMaterial | null = null;
   private nextBolt = 8;
   private boltT = -1;
+  /** In a match, bolts follow a schedule from the match seed and the shared sim clock. */
+  private schedSeed: number | null = null;
+  private schedK = 0;
+  private schedT = 0;
   /** Lightning brightness right now (0..1), for the HUD/audio and other effects. */
   flashLevel = 0;
 
@@ -264,23 +268,39 @@ export class Weather {
     p.needsUpdate = true;
   }
 
-  update(t: number, dt: number, camera: THREE.Camera): void {
+  /** Seeds the lightning schedule so every player in a match sees the same bolts. */
+  setLightningSeed(seed: number): void {
+    this.schedSeed = seed >>> 0;
+    this.schedK = 0;
+    this.schedT = 6 + hash01(this.schedSeed, 0) * 10;
+  }
+
+  /** `simTime`: seconds on the match's shared clock (bolts then follow the seeded schedule). */
+  update(t: number, dt: number, camera: THREE.Camera, simTime?: number): void {
     const w = this.map.weather;
     // lightning: a double flash now and then
-    if (w?.lightning) {
+    let b = -1;
+    if (w?.lightning && this.schedSeed !== null && simTime !== undefined) {
+      for (;;) {
+        const next = this.schedT + 14 + hash01(this.schedSeed, this.schedK + 1) * 26;
+        if (next > simTime) break;
+        this.schedT = next;
+        this.schedK++;
+      }
+      b = simTime - this.schedT;
+    } else if (w?.lightning) {
       this.nextBolt -= dt;
       if (this.nextBolt <= 0) {
         this.boltT = 0;
         this.nextBolt = 14 + Math.random() * 26;
       }
+      if (this.boltT >= 0) {
+        this.boltT += dt;
+        b = this.boltT;
+        if (b > 0.6) this.boltT = -1;
+      }
     }
-    let f = 0;
-    if (this.boltT >= 0) {
-      this.boltT += dt;
-      const b = this.boltT;
-      f = Math.max(0, 1 - b / 0.12) + (b > 0.18 ? Math.max(0, 0.8 - (b - 0.18) / 0.25) : 0);
-      if (b > 0.6) this.boltT = -1;
-    }
+    const f = b >= 0 && b <= 0.6 ? Math.max(0, 1 - b / 0.12) + (b > 0.18 ? Math.max(0, 0.8 - (b - 0.18) / 0.25) : 0) : 0;
     this.flashLevel = f;
     this.flash.intensity = f * 2.4;
     this.skyMat.uniforms.uFlash.value = f;
@@ -293,3 +313,12 @@ export class Weather {
     if (this.flyMat) this.flyMat.uniforms.uTime.value = t;
   }
 }
+
+/** Integer hash of (seed, k) to [0, 1): the same on every machine. */
+function hash01(seed: number, k: number): number {
+  let h = (seed ^ Math.imul(k + 1, 0x9e3779b1)) >>> 0;
+  h = Math.imul(h ^ (h >>> 16), 0x85ebca6b) >>> 0;
+  h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35) >>> 0;
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+
